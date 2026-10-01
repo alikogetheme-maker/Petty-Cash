@@ -45,6 +45,19 @@ namespace PettyCashAddon.Core
             }
         }
 
+        public static void Disconnect()
+        {
+            try
+            {
+                if (_company != null && _company.Connected)
+                    _company.Disconnect();
+            }
+            catch
+            {
+                // arrêt de l'add-on : on ignore
+            }
+        }
+
         public static void ThrowIfError(int returnCode, string context)
         {
             if (returnCode != 0)

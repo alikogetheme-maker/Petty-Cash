@@ -1,4 +1,4 @@
-namespace PettyCashAddon.Forms
+﻿namespace PettyCashAddon.Forms
 {
     internal static class FormIds
     {
@@ -23,14 +23,15 @@ namespace PettyCashAddon.Forms
         public const string TxtOpenBal = "txtOpenBal";
         public const string LblTheoBal = "lblTheoBal";
         public const string TxtTheoBal = "txtTheoBal";
-        public const string LblCountBal = "lblCountBal";
-        public const string TxtCountBal = "txtCountBal";
+        public const string LblCountBal = "lblCount";
+        public const string TxtCountBal = "txtCount";
         public const string LblDiff = "lblDiff";
         public const string TxtDiff = "txtDiff";
         public const string MatTrans = "matTrans";
         public const string BtnOpen = "btnOpen";
-        public const string BtnAddTrans = "btnAddTrans";
+        public const string BtnAddTrans = "btnAddTr";
         public const string BtnClose = "btnClose";
+        public const string BtnRefresh = "btnRefresh";
 
         // Items - écran popup transaction
         public const string LblDir = "lblDir";
@@ -51,10 +52,10 @@ namespace PettyCashAddon.Forms
         public const string TxtFrom = "txtFrom";
         public const string LblTo = "lblTo";
         public const string TxtTo = "txtTo";
-        public const string LblShiftFilter = "lblShiftFilter";
-        public const string CmbShiftFilter = "cmbShiftFilter";
+        public const string LblShiftFilter = "lblShiftF";
+        public const string CmbShiftFilter = "cmbShiftF";
         public const string BtnSearch = "btnSearch";
-        public const string MatSessions = "matSessions";
-        public const string MatSessionTrans = "matSessTrans";
+        public const string MatSessions = "matSess";
+        public const string MatSessionTrans = "matSessTr";
     }
 }

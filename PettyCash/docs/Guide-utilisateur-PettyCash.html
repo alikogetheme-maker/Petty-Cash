@@ -1,0 +1,606 @@
+<title>Guide Petty Cash SAP B1</title>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : sommaire collant à gauche (bureau), colonne de lecture unique ; écrans SAP reproduits dans des cadres défilables. */
+:root {
+  --bg: #f6f8f6;
+  --surface: #ffffff;
+  --fg: #1d2622;
+  --muted: #5b6862;
+  --line: #d8e0db;
+  --accent: #1d6a4c;
+  --accent-soft: #e3f0e9;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --bad: #a3302a;
+  --bad-soft: #f8e4e2;
+  --code-bg: #eef2ef;
+  --f-display: "Bitter", Georgia, "Times New Roman", serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+
+  /* Couleurs des reproductions d'écran SAP : volontairement fixes (un écran SAP reste clair quel que soit le thème) */
+  --sap-win: #eef1f4;
+  --sap-title: #dde3e9;
+  --sap-title-fg: #1e2a36;
+  --sap-border: #8e9caa;
+  --sap-fg: #222a31;
+  --sap-field: #ffffff;
+  --sap-field-border: #a7b4c1;
+  --sap-disabled: #e3e7eb;
+  --sap-disabled-fg: #4b5560;
+  --sap-head: #d5dde5;
+  --sap-row-alt: #f5f7f9;
+  --sap-sel: #fff1c2;
+  --sap-btn-top: #ffe9a8;
+  --sap-btn-bot: #f4c24c;
+  --sap-btn-border: #c3962f;
+  --sap-btn-off: #e6e6e6;
+  --sap-btn-off-fg: #9aa0a6;
+  --sap-pin: #c0392b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121815; --surface: #19211d; --fg: #e3ebe6; --muted: #9fb0a7; --line: #2c3832;
+    --accent: #6cc59c; --accent-soft: #1d3329; --warn: #e3b25e; --warn-soft: #33291a;
+    --bad: #ee8a82; --bad-soft: #3a2220; --code-bg: #212b26; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121815; --surface: #19211d; --fg: #e3ebe6; --muted: #9fb0a7; --line: #2c3832;
+  --accent: #6cc59c; --accent-soft: #1d3329; --warn: #e3b25e; --warn-soft: #33291a;
+  --bad: #ee8a82; --bad-soft: #3a2220; --code-bg: #212b26; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--f-body); font-size: 17px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 0 64px;
+}
+.layout { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 0; } nav.toc { display: none; } }
+
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; padding-top: 40px; font-size: 14.5px; }
+nav.toc p { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.toc a { display: block; padding: 4px 10px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-left-color: var(--accent); outline: none; }
+
+main { min-width: 0; max-width: 780px; }
+header.top { padding-top: 40px; padding-bottom: 8px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.eyebrow { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw, 42px); line-height: 1.15; margin: 6px 0 12px; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 700; font-size: 26px; line-height: 1.25; margin: 56px 0 12px; text-wrap: balance; scroll-margin-top: 16px; }
+h3 { font-family: var(--f-display); font-weight: 500; font-size: 20px; margin: 32px 0 8px; text-wrap: balance; }
+p, li { max-width: 68ch; }
+.lead { font-size: 19px; color: var(--muted); }
+a { color: var(--accent); }
+code, .mono { font-family: var(--f-mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+kbd { font-family: var(--f-body); font-size: .85em; font-weight: 600; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; background: var(--surface); }
+.path { font-weight: 600; }
+
+ol.steps { padding-left: 0; list-style: none; counter-reset: s; display: grid; gap: 10px; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; }
+ol.steps > li::before { content: counter(s); font-family: var(--f-display); font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 50%; width: 28px; height: 28px; display: grid; place-items: center; font-size: 15px; margin-top: 1px; }
+
+.note { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 12px 16px; margin: 18px 0; }
+.note strong:first-child { display: block; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 2px; }
+.note.tip strong:first-child { color: var(--accent); }
+.note.warn { background: var(--warn-soft); border-color: transparent; }
+.note.warn strong:first-child { color: var(--warn); }
+.note.bad { background: var(--bad-soft); border-color: transparent; }
+.note.bad strong:first-child { color: var(--bad); }
+.note p { margin: 4px 0; }
+
+.table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table.doc { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+table.doc th, table.doc td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.doc th { font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+table.doc tr:last-child td { border-bottom: 0; }
+table.doc td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--f-mono); font-size: 14.5px; white-space: nowrap; }
+
+/* Cycle de la caisse */
+.cycle { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin: 20px 0; }
+@media (max-width: 640px) { .cycle { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.cycle div { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; position: relative; }
+.cycle b { display: block; font-family: var(--f-display); font-size: 16px; }
+.cycle span { font-size: 14px; color: var(--muted); }
+.cycle i { font-style: normal; font-size: 12px; color: var(--accent); font-weight: 700; letter-spacing: .06em; }
+
+/* ---------- Reproductions d'écrans SAP B1 ---------- */
+figure.shot { margin: 22px 0 26px; }
+figure.shot .frame { overflow-x: auto; padding: 14px; background: var(--code-bg); border-radius: 8px; }
+figure.shot figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+.win { position: relative; background: var(--sap-win); border: 1px solid var(--sap-border); box-shadow: 0 4px 14px rgba(20,30,40,.18); font-family: Tahoma, "Segoe UI", Arial, sans-serif; font-size: 12px; color: var(--sap-fg); margin: 0 auto; }
+.win .tb { height: 26px; background: var(--sap-title); color: var(--sap-title-fg); border-bottom: 1px solid var(--sap-border); display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font-weight: bold; }
+.win .tb .x { display: flex; gap: 10px; font-weight: normal; color: #5c6875; }
+.win .body { position: relative; }
+.win .l, .win .f, .win .b, .win .m, .win .pin { position: absolute; }
+.win .l { height: 15px; line-height: 15px; white-space: nowrap; overflow: hidden; }
+.win .f { height: 19px; line-height: 17px; background: var(--sap-field); border: 1px solid var(--sap-field-border); padding: 0 4px; white-space: nowrap; overflow: hidden; }
+.win .f.off { background: var(--sap-disabled); color: var(--sap-disabled-fg); }
+.win .f.num { text-align: right; }
+.win .f.cmb::after { content: "▾"; position: absolute; right: 4px; top: 0; color: #4f5d6a; }
+.win .f.focus { outline: 2px solid #f0a500; outline-offset: -1px; }
+.win .b { height: 22px; line-height: 20px; text-align: center; border: 1px solid var(--sap-btn-border); border-radius: 2px; background: linear-gradient(var(--sap-btn-top), var(--sap-btn-bot)); color: #222; }
+.win .b.off { background: var(--sap-btn-off); border-color: #c4c4c4; color: var(--sap-btn-off-fg); }
+.win .m { background: var(--sap-field); border: 1px solid var(--sap-field-border); overflow: hidden; }
+.win .m table { border-collapse: collapse; table-layout: fixed; font-size: 11.5px; }
+.win .m th { background: var(--sap-head); font-weight: normal; text-align: left; padding: 2px 4px; border-right: 1px solid #b7c2cd; border-bottom: 1px solid #b7c2cd; height: 19px; white-space: nowrap; overflow: hidden; }
+.win .m td { padding: 1px 4px; height: 18px; border-right: 1px solid #e1e6eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win .m tr:nth-child(even) td { background: var(--sap-row-alt); }
+.win .m tr.sel td { background: var(--sap-sel); }
+.win .m td.n { text-align: right; }
+.win .m td.idx { color: #6b7681; text-align: center; background: var(--sap-head); }
+.win .pin { width: 20px; height: 20px; border-radius: 50%; background: var(--sap-pin); color: #fff; font: bold 12px/20px Arial, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; z-index: 2; }
+.legend { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 15.5px; }
+.legend li { display: grid; grid-template-columns: 26px minmax(0,1fr); gap: 8px; }
+.legend li span { width: 20px; height: 20px; border-radius: 50%; background: var(--sap-pin); color: #fff; font: bold 12px/20px Arial, sans-serif; text-align: center; margin-top: 3px; }
+
+/* Boîte de message SAP */
+.msg .body { padding: 16px 18px 14px; }
+.msg .txt { white-space: pre-line; line-height: 1.55; display: flex; gap: 12px; }
+.msg .ico { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #2f6fb3; color: #fff; font: bold 17px/28px Georgia, serif; text-align: center; }
+.msg .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.msg .btns .b { position: static; width: 70px; display: inline-block; }
+
+/* Menu principal SAP */
+.menu .body { padding: 6px 0; }
+.menu .it { padding: 3px 12px 3px 10px; display: flex; gap: 6px; align-items: center; }
+.menu .it.sub { padding-left: 34px; }
+.menu .it.hl { background: #cfe0f1; }
+.menu .it .ar { color: #5c6875; width: 12px; display: inline-block; }
+
+/* Statut SAP (barre d'état) */
+.sb { margin-top: 8px; font-family: Tahoma, "Segoe UI", Arial, sans-serif; font-size: 12px; padding: 4px 8px; border-radius: 3px; display: inline-block; }
+.sb.ok { background: #dff3e4; color: #1d5a2f; border: 1px solid #a8d5b3; }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="layout">
+<nav class="toc" aria-label="Sommaire">
+  <p>Sommaire</p>
+  <ol>
+    <li><a href="#principe">Le principe</a></li>
+    <li><a href="#installation">Mise en place</a></li>
+    <li><a href="#ouvrir">Ouvrir une session</a></li>
+    <li><a href="#saisir">Saisir une opération</a></li>
+    <li><a href="#corriger">Corriger une erreur</a></li>
+    <li><a href="#cloturer">Clôturer la session</a></li>
+    <li><a href="#rapport">Rapport de caisse</a></li>
+    <li><a href="#compta">Écritures générées</a></li>
+    <li><a href="#erreurs">Messages et solutions</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="top">
+  <p class="eyebrow">Add-on SAP Business One · Guide utilisateur</p>
+  <h1>Gestion de la petite caisse</h1>
+  <p class="lead">Ce guide explique comment ouvrir une session de caisse, enregistrer les entrées et sorties d'argent, compter la caisse en fin de quart et consulter l'historique. Il s'adresse aux caissiers, à leurs responsables et, pour la partie « Mise en place », à l'administrateur SAP.</p>
+  <div class="note warn">
+    <strong>À propos des illustrations</strong>
+    <p>Les écrans de ce guide sont des reproductions fidèles des fenêtres de l'add-on (mêmes champs, libellés et boutons, même disposition). Les montants, noms et numéros de compte sont des exemples ; les montants suivent le format de la société (sans décimale, virgule pour les milliers : 139,500). L'apparence exacte (couleurs, polices) dépend de votre version et de votre thème SAP Business One.</p>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<h2 id="principe">1. Le principe</h2>
+<p>La caisse fonctionne par <strong>sessions</strong>. Une session correspond à un quart de travail (matin, après-midi ou soir) tenu par un caissier. Une seule session peut être ouverte à la fois.</p>
+<div class="cycle" role="list">
+  <div role="listitem"><i>ÉTAPE 1</i><b>Ouvrir</b><span>Le solde d'ouverture est repris de la session précédente.</span></div>
+  <div role="listitem"><i>ÉTAPE 2</i><b>Saisir</b><span>Chaque recette ou dépense est comptabilisée immédiatement.</span></div>
+  <div role="listitem"><i>ÉTAPE 3</i><b>Compter</b><span>Le caissier compte l'argent réellement présent.</span></div>
+  <div role="listitem"><i>ÉTAPE 4</i><b>Clôturer</b><span>L'écart éventuel est comptabilisé, la session est figée.</span></div>
+</div>
+<p>Trois soldes sont suivis pendant une session :</p>
+<div class="table-wrap"><table class="doc">
+  <tr><th>Solde</th><th>Signification</th></tr>
+  <tr><td><strong>Ouverture</strong></td><td>L'argent présent en caisse au début du quart. C'est le solde compté à la clôture de la session précédente.</td></tr>
+  <tr><td><strong>Théorique</strong></td><td>Ce qui devrait se trouver dans la caisse : ouverture + recettes − dépenses. Mis à jour à chaque opération.</td></tr>
+  <tr><td><strong>Compté</strong></td><td>L'argent réellement compté par le caissier à la fin du quart.</td></tr>
+  <tr><td><strong>Écart</strong></td><td>Compté − théorique. Positif = excédent, négatif = manquant.</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="installation">2. Mise en place (administrateur, une seule fois)</h2>
+
+<h3>2.1 Activer l'add-on</h3>
+<ol class="steps">
+  <li><div>Dans SAP Business One : <span class="path">Administration → Add-ons → Gestion des add-ons</span>.</div></li>
+  <li><div>Enregistrez <code>PettyCashAddon.exe</code> et cochez le démarrage automatique si l'add-on doit se lancer à chaque connexion.</div></li>
+  <li><div>Au premier lancement, l'add-on crée lui-même ses tables (<code>@PC_SETTINGS</code>, <code>@PC_TTYPE</code>, <code>@PC_SESSION</code>, <code>@PC_TRANS</code>). Les autres utilisateurs doivent se reconnecter après cette création.</div></li>
+  <li><div>Le menu <strong>Petty Cash</strong>, avec son icône (un billet et une pièce), apparaît en bas du menu principal (Modules), et la barre d'état affiche « Add-on Petty Cash démarré. ».</div></li>
+</ol>
+
+<figure class="shot">
+  <div class="frame">
+    <div class="win menu" style="width:280px">
+      <div class="tb"><span>Menu principal</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="it"><span class="ar">▸</span>Administration</div>
+        <div class="it"><span class="ar">▸</span>Gestion financière</div>
+        <div class="it"><span class="ar">▸</span>CRM</div>
+        <div class="it"><span class="ar">▸</span>Ventes - Clients</div>
+        <div class="it"><span class="ar">▸</span>Achats - Fournisseurs</div>
+        <div class="it"><span class="ar">▸</span>Partenaires</div>
+        <div class="it"><span class="ar">▸</span>Banques</div>
+        <div class="it"><span class="ar">▸</span>Stocks</div>
+        <div class="it"><span class="ar">▸</span>Rapports</div>
+        <div class="it"><span class="ar">▾</span><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAE4SURBVDhPY/hPIiBdg31jumyWD0EEVAbVAOTYzMojiIDKcGpIXNsJRA5zipAFsWsAKlp19cD5F7eAaMedk67zS+FS2DVkbe6HqIag2j1z4VLYNRRvn46soXH/ArgUdg2eiyoOPbgAUX362bWIlU32M7Ljur3zWmy8sk3//PqOrgGip+3gEiACqvafFD2rQnJzq/TJSXIbm6U2tmh9fvuAQaMwFKgHEylmec0sEnq6SufbYb9fF7OB5KOV2kA9OGP6xpHZh/qUgOr+XK/4fjQESH47EnigVxmnhlNrCs5NU/h9uQCo59M2o2+HvH9fKQa6DaeGq/snH52g9ONEJFDP1wMeQBLIBtqJU8PPbx/WNSi+Wq/342TMn2tlQPLFWl2gCL7U+uTqtnX18kBnANHxifJA1W+fXAQA2b4B+E+vrQYAAAAASUVORK5CYII=" width="16" height="16" alt="" style="image-rendering:pixelated"><strong>Petty Cash</strong></div>
+        <div class="it sub hl">Session de caisse</div>
+        <div class="it sub">Rapport de caisse</div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Le menu Petty Cash et ses deux écrans, dans le menu principal de SAP Business One.</figcaption>
+</figure>
+
+<h3>2.2 Renseigner les comptes de la caisse</h3>
+<p>Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_SETTINGS</span> et complétez l'unique ligne (code <code>1</code>) :</p>
+<ul>
+  <li><strong>Compte G/L Caisse</strong> : le compte de trésorerie qui représente la caisse.</li>
+  <li><strong>Compte G/L Écarts de caisse</strong> : le compte qui reçoit les excédents et manquants constatés à la clôture.</li>
+</ul>
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:560px;height:150px">
+      <div class="tb"><span>Petty Cash - Paramètres</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="m" style="left:8px;top:8px;width:542px;height:72px">
+          <table style="width:542px">
+            <colgroup><col style="width:24px"><col style="width:60px"><col style="width:150px"><col style="width:150px"><col></colgroup>
+            <tr><th>#</th><th>Code</th><th>Nom</th><th>Compte G/L Caisse</th><th>Compte G/L Écarts de caisse</th></tr>
+            <tr><td class="idx">1</td><td>1</td><td>Paramètres caisse</td><td>57100001</td><td>65880000</td></tr>
+            <tr><td class="idx">2</td><td></td><td></td><td></td><td></td></tr>
+          </table>
+        </div>
+        <div class="b" style="left:8px;top:92px;width:65px">OK</div>
+        <div class="b" style="left:80px;top:92px;width:65px">Annuler</div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Exemple de paramétrage. Utilisez les numéros de compte de votre propre plan comptable.</figcaption>
+</figure>
+<div class="note warn"><strong>Important</strong><p>Saisissez le <em>code</em> du compte (celui visible dans le plan comptable), et choisissez des comptes de détail, pas des comptes de titre : SAP refuse de comptabiliser sur un compte de titre.</p></div>
+
+<h3>2.3 Créer les types d'opération</h3>
+<p>Chaque opération de caisse appartient à un type, qui détermine son sens (recette ou dépense) et le compte comptable mouvementé en face de la caisse. Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_TTYPE</span> :</p>
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:560px;height:236px">
+      <div class="tb"><span>Petty Cash - Types d'opération</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="m" style="left:8px;top:8px;width:542px;height:160px">
+          <table style="width:542px">
+            <colgroup><col style="width:24px"><col style="width:70px"><col style="width:230px"><col style="width:90px"><col></colgroup>
+            <tr><th>#</th><th>Code</th><th>Nom</th><th>Sens (R/D)</th><th>Compte G/L</th></tr>
+            <tr><td class="idx">1</td><td>ALIM</td><td>Alimentation de caisse</td><td>R</td><td>52110000</td></tr>
+            <tr><td class="idx">2</td><td>VENTE</td><td>Vente comptant</td><td>R</td><td>70110000</td></tr>
+            <tr><td class="idx">3</td><td>FOURN</td><td>Fournitures de bureau</td><td>D</td><td>60550000</td></tr>
+            <tr><td class="idx">4</td><td>TRANSP</td><td>Transport / courses</td><td>D</td><td>61830000</td></tr>
+            <tr><td class="idx">5</td><td>CARB</td><td>Carburant</td><td>D</td><td>60530000</td></tr>
+            <tr><td class="idx">6</td><td>BANQ</td><td>Versement en banque</td><td>D</td><td>52110000</td></tr>
+          </table>
+        </div>
+        <div class="b" style="left:8px;top:178px;width:65px">OK</div>
+        <div class="b" style="left:80px;top:178px;width:65px">Annuler</div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Exemples de types. « Nom » est le libellé que verra le caissier dans la liste déroulante.</figcaption>
+</figure>
+<ul>
+  <li><strong>Sens</strong> : <code>R</code> pour une recette (l'argent entre dans la caisse), <code>D</code> pour une dépense (l'argent sort). Une autre valeur est traitée comme une dépense.</li>
+  <li><strong>Compte G/L</strong> : obligatoire. Pour une alimentation ou un versement, c'est le compte de banque ; pour une dépense, le compte de charge.</li>
+</ul>
+
+<h3>2.4 Mettre le fonds de caisse initial</h3>
+<p>Pour la toute première session, l'add-on reprend comme solde d'ouverture <strong>le solde actuel du compte G/L Caisse</strong>. Deux façons de démarrer :</p>
+<ul>
+  <li><strong>Recommandé</strong> : ouvrez la première session (solde d'ouverture 0 si le compte est vide), puis saisissez une recette de type <em>Alimentation de caisse</em> pour le montant du fonds (par exemple 150,000). L'écriture Débit Caisse / Crédit Banque est passée automatiquement.</li>
+  <li>Ou passez vous-même l'écriture du fonds dans <span class="path">Gestion financière → Écritures</span> avant la première ouverture.</li>
+</ul>
+<p>Ensuite, chaque session reprend simplement le solde compté de la précédente.</p>
+
+<!-- ============================================================ -->
+<h2 id="ouvrir">3. Ouvrir une session</h2>
+<p>Menu <span class="path">Petty Cash → Session de caisse</span>. Si aucune session n'est ouverte, l'écran se présente ainsi :</p>
+
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:640px;height:430px">
+      <div class="tb"><span>Session de caisse</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="l" style="left:10px;top:15px;width:90px">Quart</div>
+        <div class="f cmb" style="left:110px;top:12px;width:150px">Matin</div>
+        <div class="l" style="left:280px;top:15px;width:70px">Caissier</div>
+        <div class="f focus" style="left:360px;top:12px;width:260px">K. Mensah</div>
+        <div class="l" style="left:10px;top:45px;width:90px">Statut</div>
+        <div class="f off" style="left:110px;top:42px;width:260px">Aucune session ouverte</div>
+        <div class="l" style="left:10px;top:75px;width:95px">Solde ouverture</div>
+        <div class="f off num" style="left:110px;top:72px;width:150px">150,000</div>
+        <div class="l" style="left:280px;top:75px;width:95px">Solde théorique</div>
+        <div class="f off" style="left:380px;top:72px;width:150px"></div>
+        <div class="l" style="left:10px;top:105px;width:95px">Solde compté</div>
+        <div class="f off" style="left:110px;top:102px;width:150px"></div>
+        <div class="l" style="left:280px;top:105px;width:95px">Écart</div>
+        <div class="f off" style="left:380px;top:102px;width:150px"></div>
+        <div class="m" style="left:10px;top:135px;width:610px;height:215px">
+          <table style="width:610px">
+            <colgroup><col style="width:20px"><col style="width:60px"><col style="width:60px"><col style="width:140px"><col style="width:90px"><col style="width:70px"><col></colgroup>
+            <tr><th>#</th><th>Heure</th><th>Sens</th><th>Type</th><th>Montant</th><th>Tiers</th><th>Description</th></tr>
+          </table>
+        </div>
+        <div class="b" style="left:10px;top:360px;width:130px">Ouvrir session</div>
+        <div class="b off" style="left:150px;top:360px;width:150px">Ajouter transaction</div>
+        <div class="b off" style="left:310px;top:360px;width:150px">Clôturer la session</div>
+        <div class="b" style="left:520px;top:360px;width:100px">Actualiser</div>
+        <div class="pin" style="left:263px;top:11px">1</div>
+        <div class="pin" style="left:600px;top:-10px">2</div>
+        <div class="pin" style="left:263px;top:71px">3</div>
+        <div class="pin" style="left:120px;top:349px">4</div>
+      </div>
+    </div>
+  </div>
+  <ul class="legend">
+    <li><span>1</span><div>Choisissez le quart : Matin, Après-midi ou Soir.</div></li>
+    <li><span>2</span><div>Saisissez le nom du caissier (obligatoire).</div></li>
+    <li><span>3</span><div>Le solde qui sera repris à l'ouverture est affiché pour information. Il n'est pas modifiable.</div></li>
+    <li><span>4</span><div>Cliquez sur <strong>Ouvrir session</strong>.</div></li>
+  </ul>
+</figure>
+
+<p>Une confirmation rappelle le solde repris. Avant de répondre <strong>Oui</strong>, vérifiez que ce montant correspond bien à l'argent présent dans la caisse.</p>
+<figure class="shot">
+  <div class="frame">
+    <div class="win msg" style="width:420px">
+      <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
+      <div class="body">
+        <div class="txt"><div class="ico">i</div><div>Ouvrir la session Matin pour K. Mensah ?
+
+Solde d'ouverture repris : 150,000
+Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></div>
+        <div class="btns"><span class="b">Oui</span><span class="b">Non</span></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Confirmation d'ouverture.</figcaption>
+</figure>
+<div class="note tip"><strong>Bon à savoir</strong><p>Si la fenêtre affiche déjà une session ouverte, c'est que le quart précédent n'a pas été clôturé. Il faut d'abord le clôturer (section 6) : deux sessions ne peuvent pas être ouvertes en même temps.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="saisir">4. Saisir une recette ou une dépense</h2>
+<p>Session ouverte, cliquez sur <strong>Ajouter transaction</strong>. La fenêtre de saisie s'ouvre :</p>
+
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:380px;height:240px">
+      <div class="tb"><span>Nouvelle transaction de caisse</span><span class="x">✕</span></div>
+      <div class="body">
+        <div class="l" style="left:10px;top:15px;width:110px">Sens</div>
+        <div class="f cmb" style="left:130px;top:12px;width:200px">Dépense (sortie d'argent)</div>
+        <div class="l" style="left:10px;top:45px;width:110px">Type d'opération</div>
+        <div class="f cmb" style="left:130px;top:42px;width:200px">Carburant</div>
+        <div class="l" style="left:10px;top:75px;width:110px">Montant</div>
+        <div class="f num focus" style="left:130px;top:72px;width:200px">20,000</div>
+        <div class="l" style="left:10px;top:105px;width:110px">Tiers (optionnel)</div>
+        <div class="f" style="left:130px;top:102px;width:200px"></div>
+        <div class="l" style="left:10px;top:135px;width:110px">Description</div>
+        <div class="f" style="left:130px;top:132px;width:200px">Plein véhicule service</div>
+        <div class="b" style="left:130px;top:180px;width:90px">Valider</div>
+        <div class="b" style="left:230px;top:180px;width:90px">Annuler</div>
+        <div class="pin" style="left:337px;top:11px">1</div>
+        <div class="pin" style="left:337px;top:41px">2</div>
+        <div class="pin" style="left:337px;top:71px">3</div>
+        <div class="pin" style="left:337px;top:101px">4</div>
+        <div class="pin" style="left:337px;top:131px">5</div>
+      </div>
+    </div>
+  </div>
+  <ul class="legend">
+    <li><span>1</span><div><strong>Sens</strong> : <em>Dépense</em> est proposé par défaut. Choisissez <em>Recette</em> pour une entrée d'argent.</div></li>
+    <li><span>2</span><div><strong>Type d'opération</strong> : la liste ne montre que les types du sens choisi. Changer de sens vide ce champ.</div></li>
+    <li><span>3</span><div><strong>Montant</strong> : toujours positif, sans décimale (paramétrage de la société). Tapez par exemple <code>20000</code> : SAP l'affiche <code>20,000</code>.</div></li>
+    <li><span>4</span><div><strong>Tiers</strong> : code client ou fournisseur, facultatif. S'il est saisi, il doit exister dans SAP. Il sert de référence et n'est pas mouvementé en comptabilité.</div></li>
+    <li><span>5</span><div><strong>Description</strong> : texte libre (100 caractères maximum), repris dans le libellé de l'écriture comptable.</div></li>
+  </ul>
+</figure>
+
+<p>Cliquez sur <strong>Valider</strong>. L'écriture comptable est passée immédiatement, la fenêtre se ferme, la barre d'état affiche « Transaction enregistrée et comptabilisée. », la ligne s'ajoute à la session et le solde théorique est mis à jour. Ne cliquez qu'une fois : chaque clic réussi enregistre une transaction. En cas de problème, un message s'affiche, <strong>rien n'est enregistré</strong> et la fenêtre reste ouverte pour corriger.</p>
+
+<div class="note bad"><strong>Dépense refusée</strong><p>Une dépense supérieure au solde théorique est refusée : on ne peut pas sortir de la caisse plus d'argent qu'elle n'en contient. Alimentez d'abord la caisse (recette de type <em>Alimentation de caisse</em>).</p></div>
+
+<p>Après quelques opérations, l'écran de session ressemble à ceci :</p>
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:640px;height:430px">
+      <div class="tb"><span>Session de caisse</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="l" style="left:10px;top:15px;width:90px">Quart</div>
+        <div class="f cmb off" style="left:110px;top:12px;width:150px">Matin</div>
+        <div class="l" style="left:280px;top:15px;width:70px">Caissier</div>
+        <div class="f off" style="left:360px;top:12px;width:260px">K. Mensah</div>
+        <div class="l" style="left:10px;top:45px;width:90px">Statut</div>
+        <div class="f off" style="left:110px;top:42px;width:260px">Ouverte le 01/10/2026 (Matin)</div>
+        <div class="l" style="left:10px;top:75px;width:95px">Solde ouverture</div>
+        <div class="f off num" style="left:110px;top:72px;width:150px">150,000</div>
+        <div class="l" style="left:280px;top:75px;width:95px">Solde théorique</div>
+        <div class="f off num" style="left:380px;top:72px;width:150px">139,500</div>
+        <div class="l" style="left:10px;top:105px;width:95px">Solde compté</div>
+        <div class="f num focus" style="left:110px;top:102px;width:150px"></div>
+        <div class="l" style="left:280px;top:105px;width:95px">Écart</div>
+        <div class="f off" style="left:380px;top:102px;width:150px"></div>
+        <div class="m" style="left:10px;top:135px;width:610px;height:215px">
+          <table style="width:610px">
+            <colgroup><col style="width:20px"><col style="width:60px"><col style="width:60px"><col style="width:140px"><col style="width:90px"><col style="width:70px"><col></colgroup>
+            <tr><th>#</th><th>Heure</th><th>Sens</th><th>Type</th><th>Montant</th><th>Tiers</th><th>Description</th></tr>
+            <tr><td class="idx">1</td><td>08:42:10</td><td>Dépense</td><td>Fournitures de bureau</td><td class="n">12,500</td><td></td><td>Ramettes papier + stylos</td></tr>
+            <tr><td class="idx">2</td><td>09:15:37</td><td>Dépense</td><td>Transport / courses</td><td class="n">3,000</td><td></td><td>Taxi livraison urgente</td></tr>
+            <tr><td class="idx">3</td><td>10:05:02</td><td>Recette</td><td>Vente comptant</td><td class="n">25,000</td><td>C00045</td><td>Vente comptoir ticket 1187</td></tr>
+            <tr><td class="idx">4</td><td>11:30:48</td><td>Dépense</td><td>Carburant</td><td class="n">20,000</td><td></td><td>Plein véhicule service</td></tr>
+          </table>
+        </div>
+        <div class="b off" style="left:10px;top:360px;width:130px">Ouvrir session</div>
+        <div class="b" style="left:150px;top:360px;width:150px">Ajouter transaction</div>
+        <div class="b" style="left:310px;top:360px;width:150px">Clôturer la session</div>
+        <div class="b" style="left:520px;top:360px;width:100px">Actualiser</div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Session en cours : 150,000 − 12,500 − 3,000 + 25,000 − 20,000 = 139,500 de solde théorique.</figcaption>
+</figure>
+<p>Le bouton <strong>Actualiser</strong> relit la session depuis la base, utile si un collègue a saisi une opération depuis un autre poste.</p>
+
+<!-- ============================================================ -->
+<h2 id="corriger">5. Corriger une erreur de saisie</h2>
+<p>Une opération validée ne peut être ni modifiée ni supprimée, car son écriture comptable est déjà passée. Pour la corriger, saisissez l'<strong>opération inverse</strong> :</p>
+<ul>
+  <li>même type d'opération et même montant, sens opposé ;</li>
+  <li>une description explicite, par exemple <em>« Annulation saisie 09:15 – erreur de montant »</em> ;</li>
+  <li>puis la saisie correcte.</li>
+</ul>
+<div class="note tip"><strong>Prérequis</strong><p>Pour annuler une dépense par une recette (ou l'inverse), le type doit exister dans les deux sens. Demandez à l'administrateur de créer, si besoin, un type « Annulation » de chaque sens sur le même compte, ou un type miroir pour chaque type courant.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="cloturer">6. Clôturer la session</h2>
+<ol class="steps">
+  <li><div>Comptez l'argent physiquement présent dans la caisse (billets et pièces).</div></li>
+  <li><div>Saisissez ce montant dans <strong>Solde compté</strong>. <code>139500</code>, <code>139,500</code> ou <code>139 500</code> sont acceptés (la virgule sépare les milliers). Si la caisse est vide, saisissez <code>0</code>.</div></li>
+  <li><div>Cliquez sur <strong>Clôturer la session</strong>.</div></li>
+  <li><div>Contrôlez le récapitulatif puis répondez <strong>Oui</strong>. Le bouton par défaut est <em>Non</em> pour éviter une clôture par erreur.</div></li>
+</ol>
+<figure class="shot">
+  <div class="frame">
+    <div class="win msg" style="width:420px">
+      <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
+      <div class="body">
+        <div class="txt"><div class="ico">?</div><div>Solde théorique : 139,500
+Solde compté : 139,000
+Écart : -500 (manquant)
+
+Confirmer la clôture de la session ? Elle ne pourra plus être modifiée.</div></div>
+        <div class="btns"><span class="b">Oui</span><span class="b">Non</span></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Ici, il manque 500 dans la caisse par rapport au théorique.</figcaption>
+</figure>
+<p>À la confirmation :</p>
+<ul>
+  <li>le solde théorique est recalculé une dernière fois depuis la base ;</li>
+  <li>si l'écart n'est pas nul, il est comptabilisé sur le compte d'écarts de caisse ;</li>
+  <li>la session passe au statut <em>Clôturée</em> et n'accepte plus d'opération ;</li>
+  <li>le <strong>solde compté devient le solde d'ouverture</strong> de la session suivante.</li>
+</ul>
+<figure class="shot">
+  <div class="frame">
+    <div class="win msg" style="width:340px">
+      <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
+      <div class="body">
+        <div class="txt"><div class="ico">i</div><div>Session clôturée.
+
+Solde théorique : 139,500
+Solde compté : 139,000
+Écart comptabilisé : -500</div></div>
+        <div class="btns"><span class="b">OK</span></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Message de fin de clôture. L'écran revient ensuite à l'état « Aucune session ouverte ».</figcaption>
+</figure>
+<div class="note warn"><strong>Un écart important ?</strong><p>Recomptez avant de confirmer, et vérifiez qu'aucune opération n'a été oubliée. Une fois la session clôturée, l'écart est comptabilisé et ne se corrige plus que par une écriture manuelle du service comptable.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="rapport">7. Consulter le rapport de caisse</h2>
+<p>Menu <span class="path">Petty Cash → Rapport de caisse</span>. L'écran s'ouvre sur les sept derniers jours.</p>
+<figure class="shot">
+  <div class="frame">
+    <div class="win" style="width:700px;height:470px">
+      <div class="tb"><span>Rapport de caisse</span><span class="x">_ ▢ ✕</span></div>
+      <div class="body">
+        <div class="l" style="left:10px;top:15px;width:40px">Du</div>
+        <div class="f" style="left:55px;top:12px;width:100px">24/09/2026</div>
+        <div class="l" style="left:170px;top:15px;width:25px">Au</div>
+        <div class="f" style="left:200px;top:12px;width:100px">01/10/2026</div>
+        <div class="l" style="left:320px;top:15px;width:40px">Quart</div>
+        <div class="f cmb" style="left:365px;top:12px;width:130px">Tous</div>
+        <div class="b" style="left:510px;top:10px;width:100px">Rechercher</div>
+        <div class="m" style="left:10px;top:45px;width:670px;height:190px">
+          <table style="width:670px">
+            <colgroup><col style="width:75px"><col style="width:80px"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:80px"><col style="width:70px"><col></colgroup>
+            <tr><th>Date</th><th>Quart</th><th>Caissier</th><th>Ouverture</th><th>Théorique</th><th>Compté</th><th>Écart</th><th>Statut</th></tr>
+            <tr class="sel"><td>01/10/2026</td><td>Matin</td><td>K. Mensah</td><td class="n">150,000</td><td class="n">139,500</td><td class="n">139,000</td><td class="n">-500</td><td>Clôturée</td></tr>
+            <tr><td>30/09/2026</td><td>Soir</td><td>A. Traoré</td><td class="n">148,200</td><td class="n">150,000</td><td class="n">150,000</td><td class="n">0</td><td>Clôturée</td></tr>
+            <tr><td>30/09/2026</td><td>Après-midi</td><td>A. Traoré</td><td class="n">160,000</td><td class="n">148,000</td><td class="n">148,200</td><td class="n">200</td><td>Clôturée</td></tr>
+            <tr><td>30/09/2026</td><td>Matin</td><td>K. Mensah</td><td class="n">100,000</td><td class="n">160,000</td><td class="n">160,000</td><td class="n">0</td><td>Clôturée</td></tr>
+          </table>
+        </div>
+        <div class="l" style="left:10px;top:245px;width:420px">Détail de la session sélectionnée (cliquez sur une ligne ci-dessus) :</div>
+        <div class="m" style="left:10px;top:265px;width:670px;height:165px">
+          <table style="width:670px">
+            <colgroup><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:80px"><col style="width:70px"><col style="width:150px"><col></colgroup>
+            <tr><th>Heure</th><th>Sens</th><th>Type</th><th>Montant</th><th>Tiers</th><th>Description</th><th>N° écriture</th></tr>
+            <tr><td>08:42:10</td><td>Dépense</td><td>Fournitures de bureau</td><td class="n">12,500</td><td></td><td>Ramettes papier + stylos</td><td>4521</td></tr>
+            <tr><td>09:15:37</td><td>Dépense</td><td>Transport / courses</td><td class="n">3,000</td><td></td><td>Taxi livraison urgente</td><td>4522</td></tr>
+            <tr><td>10:05:02</td><td>Recette</td><td>Vente comptant</td><td class="n">25,000</td><td>C00045</td><td>Vente comptoir ticket 1187</td><td>4523</td></tr>
+            <tr><td>11:30:48</td><td>Dépense</td><td>Carburant</td><td class="n">20,000</td><td></td><td>Plein véhicule service</td><td>4524</td></tr>
+          </table>
+        </div>
+        <div class="pin" style="left:613px;top:-8px">1</div>
+        <div class="pin" style="left:-8px;top:60px">2</div>
+        <div class="pin" style="left:660px;top:278px">3</div>
+      </div>
+    </div>
+  </div>
+  <ul class="legend">
+    <li><span>1</span><div>Choisissez la période (le calendrier SAP est disponible dans les champs date) et, si besoin, un quart, puis <strong>Rechercher</strong>.</div></li>
+    <li><span>2</span><div>Les sessions s'affichent de la plus récente à la plus ancienne. Cliquez sur une ligne pour voir son détail.</div></li>
+    <li><span>3</span><div>Le <strong>N° écriture</strong> permet de retrouver l'écriture dans <span class="path">Gestion financière → Écritures</span>.</div></li>
+  </ul>
+</figure>
+<p>Pour une session encore ouverte, les colonnes Compté et Écart restent à zéro jusqu'à la clôture.</p>
+
+<!-- ============================================================ -->
+<h2 id="compta">8. Écritures comptables générées</h2>
+<p>Pour information du service comptable, voici les écritures passées automatiquement. Chacune porte le code de la session en référence et un libellé commençant par « Caisse ».</p>
+<div class="table-wrap"><table class="doc">
+  <tr><th>Événement</th><th>Débit</th><th>Crédit</th></tr>
+  <tr><td>Recette</td><td>Compte Caisse</td><td>Compte du type d'opération</td></tr>
+  <tr><td>Dépense</td><td>Compte du type d'opération</td><td>Compte Caisse</td></tr>
+  <tr><td>Clôture avec excédent (compté &gt; théorique)</td><td>Compte Caisse</td><td>Compte Écarts de caisse</td></tr>
+  <tr><td>Clôture avec manquant (compté &lt; théorique)</td><td>Compte Écarts de caisse</td><td>Compte Caisse</td></tr>
+</table></div>
+<p>Exemple pour la session du 01/10/2026 (comptes d'exemple) :</p>
+<div class="table-wrap"><table class="doc">
+  <tr><th>N°</th><th>Libellé</th><th>Compte</th><th style="text-align:right">Débit</th><th style="text-align:right">Crédit</th></tr>
+  <tr><td>4521</td><td>Caisse Fournitures de bureau - Ramettes…</td><td>60550000<br>57100001</td><td class="num">12,500<br>&nbsp;</td><td class="num">&nbsp;<br>12,500</td></tr>
+  <tr><td>4523</td><td>Caisse Vente comptant - Vente comptoir…</td><td>57100001<br>70110000</td><td class="num">25,000<br>&nbsp;</td><td class="num">&nbsp;<br>25,000</td></tr>
+  <tr><td>4525</td><td>Caisse ecart cloture (manquant)</td><td>65880000<br>57100001</td><td class="num">500<br>&nbsp;</td><td class="num">&nbsp;<br>500</td></tr>
+</table></div>
+<p>Le libellé est limité à 50 caractères par SAP : les descriptions longues y sont tronquées, mais restent complètes dans le détail de la session.</p>
+<div class="note warn"><strong>Compte Caisse réservé</strong><p>Pour que le solde de la caisse dans l'add-on reste égal au solde du compte en comptabilité, le compte Caisse ne doit être mouvementé que par l'add-on. Un encaissement ou une écriture saisis directement dans SAP sur ce compte n'apparaîtront pas dans la session.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="erreurs">9. Messages fréquents et solutions</h2>
+<div class="table-wrap"><table class="doc">
+  <tr><th>Message</th><th>Cause et solution</th></tr>
+  <tr><td>Renseignez les comptes G/L (U_CashAcct, U_DiffAcct)…</td><td>Le paramétrage n'est pas fait. Voir la section 2.2.</td></tr>
+  <tr><td>Une session de caisse est déjà ouverte…</td><td>Le quart précédent n'a pas été clôturé. Clôturez-le avant d'en ouvrir un nouveau.</td></tr>
+  <tr><td>Renseignez le nom du caissier.</td><td>Le champ Caissier est vide.</td></tr>
+  <tr><td>Aucun type d'opération paramétré pour ce sens</td><td>Aucun type n'existe pour Recette ou Dépense. Voir la section 2.3.</td></tr>
+  <tr><td>Aucun compte G/L n'est paramétré pour le type…</td><td>Le type choisi n'a pas de compte. Complétez la table PC_TTYPE.</td></tr>
+  <tr><td>Montant invalide : saisissez un montant positif.</td><td>Montant vide, nul ou négatif. Le sens (Recette ou Dépense) se choisit dans la liste, pas avec un signe moins.</td></tr>
+  <tr><td>Dépense refusée : le solde théorique de la caisse… est insuffisant</td><td>La caisse ne contient pas assez d'argent. Vérifiez le montant ou alimentez la caisse.</td></tr>
+  <tr><td>Le tiers « … » n'existe pas dans SAP.</td><td>Code client ou fournisseur inconnu. Corrigez-le ou laissez le champ vide.</td></tr>
+  <tr><td>Comptabilisation de l'écriture de caisse : [code] …</td><td>SAP a refusé l'écriture : période comptable fermée, compte de titre, compte bloqué… Le détail suit le code d'erreur. Rien n'a été enregistré ; transmettez le message au service comptable.</td></tr>
+  <tr><td>Saisissez le solde compté… avant de clôturer.</td><td>Le champ Solde compté est vide. Saisissez 0 si la caisse est vide.</td></tr>
+</table></div>
+
+</main>
+</div>

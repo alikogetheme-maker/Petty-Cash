@@ -1,0 +1,12 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Compilation
+bin/
+obj/
+
+# Packages SAP B1 générés (.ard + exe) : produits de compilation
+*.zip
+*.ard

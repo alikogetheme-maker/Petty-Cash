@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SAPbobsCOM;
 using PettyCashAddon.Core;
 
@@ -16,34 +16,34 @@ namespace PettyCashAddon.Setup
             Company company = DiCompany.Instance;
 
             EnsureTable(company, Db.SettingsTable, "Petty Cash - Paramètres");
-            EnsureField(company, Db.SettingsTable, Db.F_CashAcct, BoFieldTypes.db_Alpha, 20, "Compte G/L Caisse");
-            EnsureField(company, Db.SettingsTable, Db.F_DiffAcct, BoFieldTypes.db_Alpha, 20, "Compte G/L Écarts de caisse");
+            EnsureField(company, Db.SettingsTable, Db.F_CashAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L Caisse");
+            EnsureField(company, Db.SettingsTable, Db.F_DiffAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L Écarts de caisse");
             EnsureSettingsRow(company);
 
             EnsureTable(company, Db.TTypeTable, "Petty Cash - Types d'opération");
-            EnsureField(company, Db.TTypeTable, Db.F_TType_Dir, BoFieldTypes.db_Alpha, 1, "Sens (R/D)");
-            EnsureField(company, Db.TTypeTable, Db.F_TType_GLAcct, BoFieldTypes.db_Alpha, 20, "Compte G/L");
+            EnsureField(company, Db.TTypeTable, Db.F_TType_Dir, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Sens (R/D)");
+            EnsureField(company, Db.TTypeTable, Db.F_TType_GLAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L");
 
-            EnsureTable(company, Db.SessionTable, "Petty Cash - Sessions de caisse");
-            EnsureField(company, Db.SessionTable, Db.F_Session_Date, BoFieldTypes.db_Date, 0, "Date");
-            EnsureField(company, Db.SessionTable, Db.F_Session_Shift, BoFieldTypes.db_Alpha, 1, "Quart (M/A/S)");
-            EnsureField(company, Db.SessionTable, Db.F_Session_Cashier, BoFieldTypes.db_Alpha, 50, "Caissier");
-            EnsureField(company, Db.SessionTable, Db.F_Session_OpenBal, BoFieldTypes.db_Float, 0, "Solde ouverture");
-            EnsureField(company, Db.SessionTable, Db.F_Session_TheoBal, BoFieldTypes.db_Float, 0, "Solde théorique");
-            EnsureField(company, Db.SessionTable, Db.F_Session_CountBal, BoFieldTypes.db_Float, 0, "Solde compté");
-            EnsureField(company, Db.SessionTable, Db.F_Session_Diff, BoFieldTypes.db_Float, 0, "Écart");
-            EnsureField(company, Db.SessionTable, Db.F_Session_Status, BoFieldTypes.db_Alpha, 1, "Statut (O/C)");
-            EnsureField(company, Db.SessionTable, Db.F_Session_ClosedAt, BoFieldTypes.db_Date, 0, "Date de clôture");
+            EnsureTable(company, Db.SessionTable, "Petty Cash - Sessions");
+            EnsureField(company, Db.SessionTable, Db.F_Session_Date, BoFieldTypes.db_Date, BoFldSubTypes.st_None, 0, "Date");
+            EnsureField(company, Db.SessionTable, Db.F_Session_Shift, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Quart (M/A/S)");
+            EnsureField(company, Db.SessionTable, Db.F_Session_Cashier, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 50, "Caissier");
+            EnsureField(company, Db.SessionTable, Db.F_Session_OpenBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde ouverture");
+            EnsureField(company, Db.SessionTable, Db.F_Session_TheoBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde théorique");
+            EnsureField(company, Db.SessionTable, Db.F_Session_CountBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde compté");
+            EnsureField(company, Db.SessionTable, Db.F_Session_Diff, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Écart");
+            EnsureField(company, Db.SessionTable, Db.F_Session_Status, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Statut (O/C)");
+            EnsureField(company, Db.SessionTable, Db.F_Session_ClosedAt, BoFieldTypes.db_Date, BoFldSubTypes.st_None, 0, "Date de clôture");
 
-            EnsureTable(company, Db.TransTable, "Petty Cash - Transactions de caisse");
-            EnsureField(company, Db.TransTable, Db.F_Trans_Session, BoFieldTypes.db_Alpha, 30, "Session");
-            EnsureField(company, Db.TransTable, Db.F_Trans_Time, BoFieldTypes.db_Alpha, 8, "Heure");
-            EnsureField(company, Db.TransTable, Db.F_Trans_Dir, BoFieldTypes.db_Alpha, 1, "Sens (R/D)");
-            EnsureField(company, Db.TransTable, Db.F_Trans_TType, BoFieldTypes.db_Alpha, 20, "Type d'opération");
-            EnsureField(company, Db.TransTable, Db.F_Trans_Amount, BoFieldTypes.db_Float, 0, "Montant");
-            EnsureField(company, Db.TransTable, Db.F_Trans_CardCode, BoFieldTypes.db_Alpha, 15, "Tiers");
-            EnsureField(company, Db.TransTable, Db.F_Trans_Descript, BoFieldTypes.db_Alpha, 100, "Description");
-            EnsureField(company, Db.TransTable, Db.F_Trans_JE, BoFieldTypes.db_Alpha, 15, "N° écriture");
+            EnsureTable(company, Db.TransTable, "Petty Cash - Transactions");
+            EnsureField(company, Db.TransTable, Db.F_Trans_Session, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 30, "Session");
+            EnsureField(company, Db.TransTable, Db.F_Trans_Time, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 8, "Heure");
+            EnsureField(company, Db.TransTable, Db.F_Trans_Dir, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Sens (R/D)");
+            EnsureField(company, Db.TransTable, Db.F_Trans_TType, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Type d'opération");
+            EnsureField(company, Db.TransTable, Db.F_Trans_Amount, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Montant");
+            EnsureField(company, Db.TransTable, Db.F_Trans_CardCode, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 15, "Tiers");
+            EnsureField(company, Db.TransTable, Db.F_Trans_Descript, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 100, "Description");
+            EnsureField(company, Db.TransTable, Db.F_Trans_JE, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 15, "N° écriture");
         }
 
         private static void EnsureTable(Company company, string tableName, string description)
@@ -67,7 +67,7 @@ namespace PettyCashAddon.Setup
             }
         }
 
-        private static void EnsureField(Company company, string tableName, string fieldName, BoFieldTypes type, int size, string description)
+        private static void EnsureField(Company company, string tableName, string fieldName, BoFieldTypes type, BoFldSubTypes subType, int size, string description)
         {
             string userFieldName = fieldName.StartsWith("U_") ? fieldName.Substring(2) : fieldName;
 
@@ -80,6 +80,7 @@ namespace PettyCashAddon.Setup
                 fieldsMd.TableName = "@" + tableName;
                 fieldsMd.Name = userFieldName;
                 fieldsMd.Type = type;
+                fieldsMd.SubType = subType;
                 if (size > 0)
                     fieldsMd.EditSize = size;
                 fieldsMd.Description = description;
@@ -110,10 +111,9 @@ namespace PettyCashAddon.Setup
 
         private static void EnsureSettingsRow(Company company)
         {
-            UserTable table = (UserTable)company.GetBusinessObject(BoObjectTypes.oUserTable);
+            UserTable table = company.UserTables.Item(Db.SettingsTable);
             try
             {
-                table.TableName = Db.SettingsTable;
                 if (table.GetByKey(Db.SettingsCode))
                     return;
 

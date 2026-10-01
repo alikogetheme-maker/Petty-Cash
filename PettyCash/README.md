@@ -12,9 +12,14 @@ caisse unique, les fonctions du **Cash Journal** de S/4HANA :
 
 ## 1. Mettre le projet en route dans Visual Studio
 
-Le SDK SAP Business One n'est pas présent sur cette machine (aucune
-installation détectée), donc ce dépôt contient le **code source complet**
-mais n'a pas été compilé/testé ici. À faire sur votre poste de dev :
+Le projet compile sur le serveur (DI API et UI API 10.0 enregistrées) avec
+le MSBuild de Visual Studio :
+
+```
+"C:\Program Files\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\amd64\MSBuild.exe" src\PettyCashAddon\PettyCashAddon.csproj -restore
+```
+
+Sur un autre poste de dev :
 
 1. Ouvrez `PettyCashAddon.sln` dans Visual Studio.
 2. Clic droit sur le projet → **Add Reference** → onglet **COM** → cochez :
@@ -22,23 +27,40 @@ mais n'a pas été compilé/testé ici. À faire sur votre poste de dev :
    - `SAP Business One DI API` (génère `Interop.SAPbobsCOM.dll`)
    Ces composants apparaissent car le SDK/client SAP B1 est installé sur
    votre poste et les enregistre en COM.
-3. Vérifiez que la plateforme cible du projet est **x86** (le SDK B1 est
-   32 bits) et le Framework cible **.NET Framework 4.8**.
+3. Vérifiez que la plateforme cible du projet est **x64** : le client SAP B1 10
+   et la DI API installés sur le serveur sont en 64 bits (la DI API 32 bits n'y
+   est pas enregistrée). Framework cible **.NET Framework 4.8**.
 4. Compilez (Build). Si un nom de méthode/énumération diffère légèrement de
    votre version de SDK (ex. `BoUTBTableType`, `BoFieldTypes`), l'IntelliSense
    vous proposera l'équivalent exact — dites-le-moi et je corrige.
 
+### Lancer et déboguer depuis Visual Studio (avant de packager)
+
+1. Ouvrez le client SAP B1 et connectez-vous à la base de test (`TST_TST`).
+2. Dans la gestion des add-ons, **arrêtez** l'add-on Petty Cash installé s'il tourne :
+   deux instances créeraient le même menu.
+3. Dans Visual Studio : configuration **Debug | x64**, puis **F5**.
+   L'argument de lancement (chaîne de connexion de développement SAP) est déjà
+   défini dans `PettyCashAddon.csproj.user` ; à défaut, `Program.cs` l'utilise
+   automatiquement quand le débogueur est attaché.
+4. Le menu **Petty Cash** apparaît dans le client ; les points d'arrêt fonctionnent.
+   Pour arrêter : **Shift+F5** (le menu reste visible jusqu'au prochain démarrage
+   ou redémarrage du client).
+
+Quand tout est bon : compilez en **Release | x64** et packagez
+`bin\x64\Release\PettyCashAddon.exe` (seul fichier nécessaire).
+
 ## 2. Enregistrer l'add-on dans SAP Business One
 
 1. Dans SAP B1 : **Administration → Add-Ons → Add-On Administration**.
-2. **New** → pointez vers `PettyCashAddon.exe` compilé (dossier `bin\x86\Debug`
+2. **New** → pointez vers `PettyCashAddon.exe` compilé (dossier `bin\x64\Debug`
    ou `Release`).
 3. Cochez "Auto Start" si vous voulez qu'il démarre avec le client, sinon
    lancez-le manuellement depuis cette fenêtre pour les tests.
 4. Au premier démarrage, l'add-on crée automatiquement (s'ils n'existent
    pas déjà) :
    - Les tables `@PC_SETTINGS`, `@PC_TTYPE`, `@PC_SESSION`, `@PC_TRANS`
-   - Un menu **Petty Cash** avec deux entrées : *Session de caisse* et
+   - Un menu **Modules → Petty Cash** avec deux entrées : *Session de caisse* et
      *Rapport de caisse*.
 
 ## 3. Paramétrage initial (à faire une fois, dans SAP B1)
@@ -55,7 +77,28 @@ Recette / compte de vente comptant, `FOURN` / Dépense / compte d'achats
 divers, `BANQ` / Dépense / compte de virement banque, etc.) — c'est
 l'équivalent des "types d'opération" du Cash Journal S/4HANA.
 
-## 4. Structure du code
+## 4. Règles de gestion
+
+- Une seule session ouverte à la fois.
+- Solde d'ouverture = **solde compté** de la dernière session clôturée (même
+  s'il vaut 0). Pour la toute première session, c'est le **solde du compte
+  G/L Caisse** : le fonds de caisse initial doit y avoir été comptabilisé.
+- Solde théorique = ouverture + recettes − dépenses, recalculé depuis la base.
+- Une dépense qui rendrait le solde théorique négatif est refusée.
+- Chaque transaction génère une écriture : Recette = Débit Caisse / Crédit
+  compte du type ; Dépense = Débit compte du type / Crédit Caisse.
+- Clôture : écart = compté − théorique. Excédent = Débit Caisse / Crédit
+  Écarts ; manquant = Débit Écarts / Crédit Caisse.
+- Écriture + ligne de caisse + mise à jour de la session sont faites dans une
+  même transaction DI API : en cas d'erreur, rien n'est enregistré.
+- Le tiers saisi est contrôlé (doit exister dans les partenaires) mais reste
+  informatif : l'écriture est passée sur le compte G/L du type d'opération.
+- Une transaction ne se supprime pas : une erreur se corrige par une
+  opération inverse (même type, sens opposé).
+
+Guide utilisateur : `docs/Guide-utilisateur-PettyCash.html`.
+
+## 5. Structure du code
 
 ```
 src/PettyCashAddon/
@@ -76,7 +119,7 @@ Toute la logique de comptabilisation (écritures au journal) est centralisée
 dans `Services/CashSessionService.cs` — c'est le fichier à relire en
 premier pour comprendre le comportement métier.
 
-## 5. Limites connues / pistes d'évolution
+## 6. Limites connues / pistes d'évolution
 
 - Une seule caisse gérée (pas de multi-caisse) — conforme au besoin exprimé.
 - Le verrouillage d'une session clôturée est appliqué **au niveau de

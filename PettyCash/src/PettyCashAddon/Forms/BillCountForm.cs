@@ -134,7 +134,9 @@ namespace PettyCashAddon.Forms
             dt.Columns.Add("Lbl", BoFieldsType.ft_AlphaNumeric, 50);
             dt.Columns.Add("Val", BoFieldsType.ft_Sum);
             dt.Columns.Add("Qty", BoFieldsType.ft_Integer);
-            dt.Columns.Add("Amt", BoFieldsType.ft_Sum);
+            // Montant de ligne affiché en texte déjà mis en forme : il est recalculé
+            // par l'add-on, jamais relu.
+            dt.Columns.Add("Amt", BoFieldsType.ft_AlphaNumeric, 30);
 
             dt.Rows.Add(_denoms.Count);
             for (int i = 0; i < _denoms.Count; i++)
@@ -142,7 +144,7 @@ namespace PettyCashAddon.Forms
                 dt.SetValue("Lbl", i, _denoms[i].Name);
                 dt.SetValue("Val", i, _denoms[i].Value);
                 dt.SetValue("Qty", i, 0);
-                dt.SetValue("Amt", i, 0.0);
+                dt.SetValue("Amt", i, CashSessionService.FormatAmount(0));
             }
 
             Item item = _form.Items.Add(FormIds.MatBill, BoFormItemTypes.it_MATRIX);
@@ -154,6 +156,9 @@ namespace PettyCashAddon.Forms
             AddColumn(mat, "colVal", "Valeur", 80, "Val", false);
             AddColumn(mat, "colQty", "Quantité", 70, "Qty", true);
             AddColumn(mat, "colAmt", "Montant", 100, "Amt", false);
+            mat.Columns.Item("colVal").RightJustified = true;
+            mat.Columns.Item("colQty").RightJustified = true;
+            mat.Columns.Item("colAmt").RightJustified = true;
             mat.LoadFromDataSource();
         }
 
@@ -184,7 +189,7 @@ namespace PettyCashAddon.Forms
             try
             {
                 if (pVal.EventType == BoEventTypes.et_VALIDATE && pVal.ItemUID == FormIds.MatBill &&
-                    pVal.ColUID == "colQty" && pVal.ItemChanged && pVal.Row > 0)
+                    pVal.ColUID == "colQty" && pVal.Row > 0 && pVal.Row <= _denoms.Count)
                 {
                     RecalcLine(pVal.Row);
                     return;
@@ -204,37 +209,59 @@ namespace PettyCashAddon.Forms
             }
         }
 
+        // Les quantités sont lues directement dans les cellules affichées : avec une
+        // grille liée à une DataTable, GetLineData/SetLineData ne recopient pas la
+        // ligne au bon endroit, ce qui faussait le total compté.
+
+        /// <summary>Quantité saisie à la ligne (1..n) ; null si la saisie n'est pas un entier.</summary>
+        private int? ReadQty(Matrix mat, int row)
+        {
+            string text = ((EditText)mat.Columns.Item("colQty").Cells.Item(row).Specific).Value;
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
+            if (!CashSessionService.TryParseAmount(text, out double value) || value != Math.Floor(value))
+                return null;
+            return (int)value;
+        }
+
         /// <summary>Recalcule le montant d'une ligne après saisie de sa quantité, puis les totaux.</summary>
         private void RecalcLine(int row)
         {
             Matrix mat = (Matrix)_form.Items.Item(FormIds.MatBill).Specific;
-            DataTable dt = _form.DataSources.DataTables.Item(Dt);
-            mat.GetLineData(row);
+            int? qty = ReadQty(mat, row);
+            if (qty == null || qty < 0)
+                _app.StatusBar.SetText("Quantité invalide sur la ligne « " + _denoms[row - 1].Name + " » : saisissez un nombre entier positif.",
+                    BoMessageTime.bmt_Short, BoStatusBarMessageType.smt_Warning);
 
-            int qty = Convert.ToInt32(dt.GetValue("Qty", row - 1));
-            if (qty < 0)
+            try
             {
-                qty = 0;
-                dt.SetValue("Qty", row - 1, 0);
-                _app.StatusBar.SetText("La quantité ne peut pas être négative.", BoMessageTime.bmt_Short, BoStatusBarMessageType.smt_Warning);
+                ((EditText)mat.Columns.Item("colAmt").Cells.Item(row).Specific).Value =
+                    CashSessionService.FormatAmount(Math.Max(0, qty ?? 0) * _denoms[row - 1].Value);
             }
-            dt.SetValue("Amt", row - 1, qty * _denoms[row - 1].Value);
-            mat.SetLineData(row);
+            catch
+            {
+                // Affichage du montant de ligne seulement : le total reste juste
+            }
             UpdateTotals();
         }
 
-        private List<CountLine> ReadLines()
+        /// <summary>Lignes de billetage lues dans la grille ; invalidRow = 1re ligne mal saisie (0 si aucune).</summary>
+        private List<CountLine> ReadLines(out int invalidRow)
         {
-            DataTable dt = _form.DataSources.DataTables.Item(Dt);
+            Matrix mat = (Matrix)_form.Items.Item(FormIds.MatBill).Specific;
+            invalidRow = 0;
             var lines = new List<CountLine>();
             for (int i = 0; i < _denoms.Count; i++)
             {
+                int? qty = ReadQty(mat, i + 1);
+                if ((qty == null || qty < 0) && invalidRow == 0)
+                    invalidRow = i + 1;
                 lines.Add(new CountLine
                 {
                     DenomCode = _denoms[i].Code,
                     Label = _denoms[i].Name,
                     Value = _denoms[i].Value,
-                    Qty = Math.Max(0, Convert.ToInt32(dt.GetValue("Qty", i)))
+                    Qty = Math.Max(0, qty ?? 0)
                 });
             }
             return lines;
@@ -242,7 +269,7 @@ namespace PettyCashAddon.Forms
 
         private void UpdateTotals()
         {
-            double total = ReadLines().Sum(l => l.Amount);
+            double total = ReadLines(out _).Sum(l => l.Amount);
             double diff = total - _expected;
             UserDataSources uds = _form.DataSources.UserDataSources;
             uds.Item(UdTotal).ValueEx = CashSessionService.FormatAmount(total);
@@ -251,14 +278,13 @@ namespace PettyCashAddon.Forms
 
         private void HandleOk()
         {
-            Matrix mat = (Matrix)_form.Items.Item(FormIds.MatBill).Specific;
-            mat.FlushToDataSource();
-            List<CountLine> lines = ReadLines();
-            if (lines.Any(l => l.Qty < 0))
+            List<CountLine> lines = ReadLines(out int invalidRow);
+            if (invalidRow > 0)
             {
-                _app.MessageBox("Une quantité ne peut pas être négative.");
+                _app.MessageBox("Quantité invalide sur la ligne « " + _denoms[invalidRow - 1].Name + " » : saisissez un nombre entier positif.");
                 return;
             }
+            UpdateTotals();
 
             double total = lines.Sum(l => l.Amount);
             double diff = total - _expected;

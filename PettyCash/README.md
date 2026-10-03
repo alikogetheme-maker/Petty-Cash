@@ -1,14 +1,17 @@
-# PettyCashAddon — Gestion de caisse pour SAP Business One (HANA)
+# PettyCashAddon — Gestion des caisses pour SAP Business One
 
-Add-on classique SAP Business One (UI API + DI API) qui reproduit, pour une
-caisse unique, les fonctions du **Cash Journal** de S/4HANA :
+Add-on classique SAP Business One (UI API + DI API, SQL Server ou HANA) qui
+reproduit les fonctions du **Cash Journal** de S/4HANA, pour **plusieurs
+caisses** tenues en parallèle par des utilisateurs SAP différents :
 
-- Connaître le solde d'ouverture au début de chaque quart/journée.
-- Enregistrer les recettes et dépenses de caisse (avec comptabilisation
-  automatique en écriture au journal).
-- Clôturer la session avec comptage physique et calcul automatique de
-  l'écart (comptabilisé sur un compte d'écart dédié).
-- Éditer un rapport de caisse filtrable par période et par quart.
+- Chaque utilisateur SAP ouvre sa session sur une **caisse libre** ; une caisse
+  ouverte n'est plus proposée aux autres tant qu'elle n'est pas clôturée.
+- **Billetage** (billets et pièces) à l'ouverture et à la clôture ; les écarts
+  sont calculés et comptabilisés automatiquement.
+- Recettes et dépenses de caisse comptabilisées en écriture au journal.
+- **Rapports** par période, caisse, utilisateur et quart : sessions détaillées,
+  synthèse par caisse, synthèse par utilisateur, détail des opérations et du
+  billetage.
 
 ## 1. Mettre le projet en route dans Visual Studio
 
@@ -30,9 +33,7 @@ Sur un autre poste de dev :
 3. Vérifiez que la plateforme cible du projet est **x64** : le client SAP B1 10
    et la DI API installés sur le serveur sont en 64 bits (la DI API 32 bits n'y
    est pas enregistrée). Framework cible **.NET Framework 4.8**.
-4. Compilez (Build). Si un nom de méthode/énumération diffère légèrement de
-   votre version de SDK (ex. `BoUTBTableType`, `BoFieldTypes`), l'IntelliSense
-   vous proposera l'équivalent exact — dites-le-moi et je corrige.
+4. Compilez (Build).
 
 ### Lancer et déboguer depuis Visual Studio (avant de packager)
 
@@ -48,53 +49,66 @@ Sur un autre poste de dev :
    ou redémarrage du client).
 
 Quand tout est bon : compilez en **Release | x64** et packagez
-`bin\x64\Release\PettyCashAddon.exe` (seul fichier nécessaire).
+`bin\x64\Release\PettyCashAddon.exe` (seul fichier nécessaire : les types SAP
+sont intégrés à l'exe, l'icône du menu aussi).
 
 ## 2. Enregistrer l'add-on dans SAP Business One
 
 1. Dans SAP B1 : **Administration → Add-Ons → Add-On Administration**.
-2. **New** → pointez vers `PettyCashAddon.exe` compilé (dossier `bin\x64\Debug`
-   ou `Release`).
-3. Cochez "Auto Start" si vous voulez qu'il démarre avec le client, sinon
-   lancez-le manuellement depuis cette fenêtre pour les tests.
-4. Au premier démarrage, l'add-on crée automatiquement (s'ils n'existent
-   pas déjà) :
-   - Les tables `@PC_SETTINGS`, `@PC_TTYPE`, `@PC_SESSION`, `@PC_TRANS`
-   - Un menu **Modules → Petty Cash** avec deux entrées : *Session de caisse* et
-     *Rapport de caisse*.
+2. Enregistrez le package (64 bits) contenant `PettyCashAddon.exe`.
+3. Au premier démarrage, l'add-on crée automatiquement (s'ils n'existent pas) :
+   - les tables `@PC_SETTINGS`, `@PC_CASHBOX`, `@PC_TTYPE`, `@PC_SESSION`,
+     `@PC_TRANS`, `@PC_DENOM`, `@PC_COUNT`, `@PC_LOCK` ;
+   - les 13 coupures du franc CFA dans `@PC_DENOM` ;
+   - un menu **Modules → Petty Cash** : *Session de caisse* et *Rapport de caisse*.
+   Les autres utilisateurs connectés doivent se reconnecter après cette création.
 
-## 3. Paramétrage initial (à faire une fois, dans SAP B1)
+## 3. Paramétrage initial (dans SAP B1, *Outils → Fenêtres par défaut*)
 
-Avant la première session, ouvrez la table `@PC_SETTINGS` (via
-*Outils → Personnalisation → Gestionnaire de données définies par
-l'utilisateur*, ou directement l'écran généré) et renseignez :
+- **PC_SETTINGS** (ligne `1`) : `U_DiffAcct` = compte d'écarts de caisse par défaut.
+- **PC_CASHBOX** : une ligne par caisse — Code court (ex. `CAISSE2`), Nom
+  affiché (unique), `U_CashAcct` = compte G/L de la caisse, `U_DiffAcct`
+  (facultatif) = compte d'écarts propre à la caisse, `U_Active` = `Y`/`N`.
+  Utilisez **un compte G/L distinct par caisse**.
+- **PC_TTYPE** : types d'opération (Code, Nom unique, `U_Dir` = `R`/`D`,
+  `U_GLAcct`), communs à toutes les caisses.
+- **PC_DENOM** : coupures proposées au billetage (`U_Active` = `N` pour en masquer une).
 
-- `U_CashAcct` : code du compte G/L "Caisse".
-- `U_DiffAcct` : code du compte G/L "Écarts de caisse".
-
-Puis alimentez `@PC_TTYPE` avec vos types d'opération (ex. `VENTE` /
-Recette / compte de vente comptant, `FOURN` / Dépense / compte d'achats
-divers, `BANQ` / Dépense / compte de virement banque, etc.) — c'est
-l'équivalent des "types d'opération" du Cash Journal S/4HANA.
+Migration depuis la version mono-caisse : au démarrage, une caisse `CAISSE1`
+« Caisse principale » est créée avec l'ancien `U_CashAcct` de `PC_SETTINGS`, et
+les sessions existantes y sont rattachées.
 
 ## 4. Règles de gestion
 
-- Une seule session ouverte à la fois.
-- Solde d'ouverture = **solde compté** de la dernière session clôturée (même
-  s'il vaut 0). Pour la toute première session, c'est le **solde du compte
-  G/L Caisse** : le fonds de caisse initial doit y avoir été comptabilisé.
+- Une session = une caisse + un utilisateur SAP (repris automatiquement) + un quart.
+- **Une caisse n'a qu'une session ouverte** et **un utilisateur n'a qu'une
+  session ouverte**. Garanti par des verrous (`@PC_LOCK`) protégés par l'index
+  unique de SAP : deux postes ne peuvent pas ouvrir la même caisse, même au
+  même instant. Un verrou dont la session n'est plus ouverte est ignoré.
+- Seul l'**ouvreur** saisit des opérations ; l'ouvreur ou un
+  **superutilisateur SAP** peut clôturer (depuis le rapport pour une session
+  oubliée).
+- **Ouverture** : solde attendu = solde compté de la dernière session de la
+  caisse (première fois : solde du compte G/L de la caisse). Le billetage
+  d'ouverture devient le solde d'ouverture ; s'il diffère de l'attendu,
+  l'**écart d'ouverture** est comptabilisé.
 - Solde théorique = ouverture + recettes − dépenses, recalculé depuis la base.
 - Une dépense qui rendrait le solde théorique négatif est refusée.
-- Chaque transaction génère une écriture : Recette = Débit Caisse / Crédit
-  compte du type ; Dépense = Débit compte du type / Crédit Caisse.
-- Clôture : écart = compté − théorique. Excédent = Débit Caisse / Crédit
-  Écarts ; manquant = Débit Écarts / Crédit Caisse.
-- Écriture + ligne de caisse + mise à jour de la session sont faites dans une
-  même transaction DI API : en cas d'erreur, rien n'est enregistré.
+- Écritures (référence = code de session) :
+  - Recette : Débit Caisse / Crédit compte du type ;
+  - Dépense : Débit compte du type / Crédit Caisse ;
+  - Excédent (ouverture ou clôture) : Débit Caisse / Crédit Écarts ;
+  - Manquant (ouverture ou clôture) : Débit Écarts / Crédit Caisse.
+- **Clôture** : billetage obligatoire ; écart = compté − théorique, comptabilisé ;
+  la caisse est libérée.
+- Chaque opération (écritures, lignes, session, billetage, verrous) est faite
+  dans une même transaction DI API : en cas d'erreur, rien n'est enregistré.
 - Le tiers saisi est contrôlé (doit exister dans les partenaires) mais reste
   informatif : l'écriture est passée sur le compte G/L du type d'opération.
 - Une transaction ne se supprime pas : une erreur se corrige par une
   opération inverse (même type, sens opposé).
+- Toute table utilisateur SAP a un index unique sur `Code` **et** sur `Name` :
+  l'add-on met le Code dans Name pour ses propres lignes.
 
 Guide utilisateur : `docs/Guide-utilisateur-PettyCash.html`.
 
@@ -102,32 +116,28 @@ Guide utilisateur : `docs/Guide-utilisateur-PettyCash.html`.
 
 ```
 src/PettyCashAddon/
-  Program.cs                     Point d'entrée, connexion UI API/DI API
+  Program.cs                     Point d'entrée, connexion UI API/DI API, journal de démarrage
   Constants.cs                   Noms de tables/champs
   Core/DiCompany.cs               Connexion DI API via le cookie de contexte
-  Core/SboApplication.cs          Menus + dispatch des événements UI
-  Setup/MetadataSetup.cs          Création idempotente des UDT/UDF au démarrage
+  Core/SboApplication.cs          Menu (avec icône intégrée)
+  Setup/MetadataSetup.cs          Création idempotente des UDT/UDF, coupures, migration
   Models/Enums.cs                 Quart, Sens (Recette/Dépense), Statut session
-  Services/CashSessionService.cs  Logique métier : ouverture, transaction, clôture
-  Forms/FormIds.cs                Identifiants des écrans
+  Services/CashSessionService.cs  Logique métier : caisses, verrous, sessions, billetage, rapports
+  Forms/FormIds.cs                Identifiants des écrans (≤ 10 caractères)
   Forms/CashSessionFormController.cs   Écran "Session de caisse"
   Forms/TransactionEntryForm.cs        Popup de saisie d'une transaction
-  Forms/CashReportFormController.cs    Écran "Rapport de caisse"
+  Forms/BillCountForm.cs               Popup de billetage (ouverture / clôture)
+  Forms/CashReportFormController.cs    Écran "Rapport de caisse" (grilles SAP)
 ```
 
-Toute la logique de comptabilisation (écritures au journal) est centralisée
-dans `Services/CashSessionService.cs` — c'est le fichier à relire en
-premier pour comprendre le comportement métier.
+Toute la logique de comptabilisation est centralisée dans
+`Services/CashSessionService.cs` — c'est le fichier à relire en premier.
 
 ## 6. Limites connues / pistes d'évolution
 
-- Une seule caisse gérée (pas de multi-caisse) — conforme au besoin exprimé.
-- Le verrouillage d'une session clôturée est appliqué **au niveau de
-  l'add-on** (impossible d'ajouter une transaction via cet écran une fois
-  `U_Status = 'C'`), mais pas au niveau base de données. Pour un verrou
-  strict même via SQL direct, il faudrait ajouter une Transaction
-  Notification côté serveur — je peux l'ajouter si le contrôle interne
-  l'exige.
-- Le comptage de clôture est saisi en un seul montant global. Si vous
-  voulez le détail par dénomination (billets/pièces), on ajoute un sous-écran
-  de comptage — dites-le-moi.
+- Les règles sont appliquées **par l'add-on**, pas au niveau base de données :
+  une modification directe des tables ou une écriture manuelle sur un compte
+  de caisse n'est pas bloquée. Une Transaction Notification côté serveur peut
+  être ajoutée si le contrôle interne l'exige.
+- Pas de restriction des caisses par utilisateur : toute caisse active et
+  libre est proposée à tout utilisateur.

@@ -1,5 +1,5 @@
-﻿using System;
-using System.Globalization;
+using System;
+using System.Linq;
 using SAPbouiCOM;
 using PettyCashAddon.Models;
 using PettyCashAddon.Services;
@@ -7,32 +7,39 @@ using PettyCashAddon.Services;
 namespace PettyCashAddon.Forms
 {
     /// <summary>
-    /// Écran principal "Session de caisse" : ouverture, saisie des
-    /// transactions du quart en cours, clôture avec comptage physique.
+    /// Écran principal "Session de caisse" de l'utilisateur SAP connecté :
+    /// choix d'une caisse libre, ouverture avec billetage, saisie des
+    /// transactions, clôture avec billetage.
     ///
     /// Les champs sont liés à des UserDataSources : c'est ce qui permet
     /// d'afficher une valeur dans un champ désactivé (affecter EditText.Value
-    /// sur un champ désactivé lève "Form item not editable") et de laisser
-    /// SAP gérer le format des montants selon le paramétrage de la société.
+    /// sur un champ désactivé lève "Form item not editable").
     /// </summary>
     internal class CashSessionFormController
     {
+        private const string UdBox = "udBox";
         private const string UdShift = "udShift";
-        private const string UdCashier = "udCash";
+        private const string UdUser = "udUser";
         private const string UdStatus = "udStat";
         private const string UdOpenBal = "udOpen";
         private const string UdTheoBal = "udTheo";
         private const string UdCountBal = "udCount";
         private const string UdDiff = "udDiff";
+        private const string UdSink = "udSink";
+        // Petit champ invisible à l'œil qui reçoit le focus : SAP refuse de
+        // désactiver l'élément actif, et ni les boutons ni la grille ne le prennent.
+        private const string FocusSink = "txtSink";
 
         private readonly Application _app;
         private readonly TransactionEntryForm _entryForm;
+        private readonly BillCountForm _billForm;
         private Form _form;
         private SessionRow _session;
 
-        public CashSessionFormController(Application app)
+        public CashSessionFormController(Application app, BillCountForm billForm)
         {
             _app = app;
+            _billForm = billForm;
             _entryForm = new TransactionEntryForm(app);
             _app.ItemEvent += App_ItemEvent;
         }
@@ -46,6 +53,13 @@ namespace PettyCashAddon.Forms
                 return;
             }
             Build();
+        }
+
+        /// <summary>Rafraîchit l'écran s'il est ouvert (appelé après une clôture depuis le rapport).</summary>
+        public void RefreshIfOpen()
+        {
+            if (_form != null)
+                RefreshFromServer();
         }
 
         private void Build()
@@ -64,39 +78,44 @@ namespace PettyCashAddon.Forms
                 _form.Height = 430;
 
                 UserDataSources uds = _form.DataSources.UserDataSources;
+                uds.Add(UdBox, BoDataType.dt_SHORT_TEXT, 20);
                 uds.Add(UdShift, BoDataType.dt_SHORT_TEXT, 1);
-                uds.Add(UdCashier, BoDataType.dt_SHORT_TEXT, 50);
-                uds.Add(UdStatus, BoDataType.dt_SHORT_TEXT, 50);
+                uds.Add(UdUser, BoDataType.dt_SHORT_TEXT, 100);
+                uds.Add(UdStatus, BoDataType.dt_SHORT_TEXT, 100);
                 uds.Add(UdOpenBal, BoDataType.dt_SHORT_TEXT, 30);
                 uds.Add(UdTheoBal, BoDataType.dt_SHORT_TEXT, 30);
                 uds.Add(UdCountBal, BoDataType.dt_SHORT_TEXT, 30);
                 uds.Add(UdDiff, BoDataType.dt_SHORT_TEXT, 30);
+                uds.Add(UdSink, BoDataType.dt_SHORT_TEXT, 1);
 
-                AddLabel(FormIds.LblShift, "Quart", 10, 15, 90, FormIds.CmbShift);
-                ComboBox cmbShift = AddCombo(FormIds.CmbShift, 110, 12, 150);
+                AddLabel(FormIds.LblBox, "Caisse", 10, 15, 95, FormIds.CmbBox);
+                AddCombo(FormIds.CmbBox, 110, 12, 200).DataBind.SetBound(true, "", UdBox);
+
+                AddLabel(FormIds.LblShift, "Quart", 330, 15, 65, FormIds.CmbShift);
+                ComboBox cmbShift = AddCombo(FormIds.CmbShift, 400, 12, 150);
                 cmbShift.DataBind.SetBound(true, "", UdShift);
                 cmbShift.ValidValues.Add("M", "Matin");
                 cmbShift.ValidValues.Add("A", "Après-midi");
                 cmbShift.ValidValues.Add("S", "Soir");
-                SetText(UdShift, "M");
+                SetText(UdShift, DefaultShiftCode());
 
-                AddLabel(FormIds.LblCashier, "Caissier", 280, 15, 70, FormIds.TxtCashier);
-                AddEdit(FormIds.TxtCashier, 360, 12, 260, UdCashier);
+                AddLabel(FormIds.LblUser, "Utilisateur", 10, 45, 95, FormIds.TxtUser);
+                AddEdit(FormIds.TxtUser, 110, 42, 200, UdUser).Enabled = false;
 
-                AddLabel(FormIds.LblStatus, "Statut", 10, 45, 90, FormIds.TxtStatus);
-                AddEdit(FormIds.TxtStatus, 110, 42, 260, UdStatus).Enabled = false;
+                AddLabel(FormIds.LblStatus, "Statut", 330, 45, 65, FormIds.TxtStatus);
+                AddEdit(FormIds.TxtStatus, 400, 42, 220, UdStatus).Enabled = false;
 
                 AddLabel(FormIds.LblOpenBal, "Solde ouverture", 10, 75, 95, FormIds.TxtOpenBal);
                 AddEdit(FormIds.TxtOpenBal, 110, 72, 150, UdOpenBal).Enabled = false;
 
-                AddLabel(FormIds.LblTheoBal, "Solde théorique", 280, 75, 95, FormIds.TxtTheoBal);
-                AddEdit(FormIds.TxtTheoBal, 380, 72, 150, UdTheoBal).Enabled = false;
+                AddLabel(FormIds.LblTheoBal, "Solde théorique", 330, 75, 65, FormIds.TxtTheoBal);
+                AddEdit(FormIds.TxtTheoBal, 400, 72, 150, UdTheoBal).Enabled = false;
 
                 AddLabel(FormIds.LblCountBal, "Solde compté", 10, 105, 95, FormIds.TxtCountBal);
-                AddEdit(FormIds.TxtCountBal, 110, 102, 150, UdCountBal);
+                AddEdit(FormIds.TxtCountBal, 110, 102, 150, UdCountBal).Enabled = false;
 
-                AddLabel(FormIds.LblDiff, "Écart", 280, 105, 95, FormIds.TxtDiff);
-                AddEdit(FormIds.TxtDiff, 380, 102, 150, UdDiff).Enabled = false;
+                AddLabel(FormIds.LblDiff, "Écart", 330, 105, 65, FormIds.TxtDiff);
+                AddEdit(FormIds.TxtDiff, 400, 102, 150, UdDiff).Enabled = false;
 
                 foreach (string amountItem in new[] { FormIds.TxtOpenBal, FormIds.TxtTheoBal, FormIds.TxtCountBal, FormIds.TxtDiff })
                     _form.Items.Item(amountItem).RightJustified = true;
@@ -107,6 +126,8 @@ namespace PettyCashAddon.Forms
                 AddButton(FormIds.BtnAddTrans, "Ajouter transaction", 150, 360, 150);
                 AddButton(FormIds.BtnClose, "Clôturer la session", 310, 360, 150);
                 AddButton(FormIds.BtnRefresh, "Actualiser", 520, 360, 100);
+
+                AddEdit(FocusSink, 636, 392, 1, UdSink);
             }
             catch
             {
@@ -176,7 +197,8 @@ namespace PettyCashAddon.Forms
             if (_form == null)
                 return;
 
-            _session = CashSessionService.GetOpenSession();
+            SapUser user = CashSessionService.GetCurrentUser();
+            _session = CashSessionService.GetOpenSessionForUser(user.Code);
             bool hasOpenSession = _session != null;
 
             // SAP refuse de manipuler le focus ou les éléments d'un formulaire
@@ -187,56 +209,74 @@ namespace PettyCashAddon.Forms
             _form.Freeze(true);
             try
             {
-                // On active d'abord ce qui doit l'être, on y place le focus, puis
-                // on désactive le reste : SAP refuse de désactiver le champ actif.
+                // Focus sur le champ "puits" avant toute (dés)activation
+                _form.ActiveItem = FocusSink;
+
+                SetText(UdUser, user.Name + (user.IsSuperUser ? " (superutilisateur)" : ""));
+                ComboBox cmbBox = (ComboBox)_form.Items.Item(FormIds.CmbBox).Specific;
+                SetText(UdBox, "");
+                while (cmbBox.ValidValues.Count > 0)
+                    cmbBox.ValidValues.Remove(0, BoSearchKey.psk_Index);
+
+                bool canOpen = false;
                 if (hasOpenSession)
                 {
-                    SetEnabled(FormIds.TxtCountBal, true);
-                    _form.ActiveItem = FormIds.TxtCountBal;
-                    SetEnabled(FormIds.CmbShift, false);
-                    SetEnabled(FormIds.TxtCashier, false);
-                }
-                else
-                {
-                    SetEnabled(FormIds.CmbShift, true);
-                    SetEnabled(FormIds.TxtCashier, true);
-                    _form.ActiveItem = FormIds.TxtCashier;
-                    SetEnabled(FormIds.TxtCountBal, false);
-                }
-
-                SetEnabled(FormIds.BtnOpen, !hasOpenSession);
-                SetEnabled(FormIds.BtnAddTrans, hasOpenSession);
-                SetEnabled(FormIds.BtnClose, hasOpenSession);
-
-                if (hasOpenSession)
-                {
+                    cmbBox.ValidValues.Add(_session.CashBox, CashSessionService.CashBoxName(_session.CashBox));
+                    SetText(UdBox, _session.CashBox);
                     SetText(UdShift, EnumCodes.ToCode(_session.Shift));
-                    SetText(UdCashier, _session.Cashier);
                     SetText(UdStatus, "Ouverte le " + _session.CashDate.ToString("dd/MM/yyyy") + " (" + ShiftLabel(_session.Shift) + ")");
                     SetAmount(UdOpenBal, _session.OpenBal);
                     SetAmount(UdTheoBal, _session.TheoBal);
+                    SetText(UdCountBal, "");
                     SetText(UdDiff, "");
                     RefreshMatrix();
                 }
                 else
                 {
-                    SetText(UdStatus, "Aucune session ouverte");
-                    // Solde qui sera repris à l'ouverture, pour information
-                    string forecastError = null;
-                    try { SetAmount(UdOpenBal, CashSessionService.GetNextOpeningBalance()); }
-                    catch (Exception ex) { SetText(UdOpenBal, ""); forecastError = ex.Message; }
+                    var free = CashSessionService.GetCashBoxes(true).Where(b => b.IsFree).ToList();
+                    foreach (var box in free)
+                        cmbBox.ValidValues.Add(box.Code, box.Name);
+                    canOpen = free.Count > 0;
+                    if (canOpen)
+                        SetText(UdBox, free[0].Code);
+
+                    SetText(UdStatus, canOpen ? "Aucune session ouverte" : "Aucune caisse libre");
                     SetText(UdTheoBal, "");
                     SetText(UdCountBal, "");
                     SetText(UdDiff, "");
+                    ShowOpeningForecast();
                     ClearMatrix();
-
-                    if (forecastError != null)
-                        _app.StatusBar.SetText(forecastError, BoMessageTime.bmt_Medium, BoStatusBarMessageType.smt_Warning);
                 }
+
+                SetEnabled(FormIds.CmbBox, !hasOpenSession && canOpen);
+                SetEnabled(FormIds.CmbShift, !hasOpenSession);
+                SetEnabled(FormIds.BtnOpen, !hasOpenSession && canOpen);
+                SetEnabled(FormIds.BtnAddTrans, hasOpenSession);
+                SetEnabled(FormIds.BtnClose, hasOpenSession);
             }
             finally
             {
                 _form.Freeze(false);
+            }
+        }
+
+        /// <summary>Affiche le solde qui sera attendu à l'ouverture de la caisse choisie.</summary>
+        private void ShowOpeningForecast()
+        {
+            string box = GetText(UdBox);
+            if (box.Length == 0)
+            {
+                SetText(UdOpenBal, "");
+                return;
+            }
+            try
+            {
+                SetAmount(UdOpenBal, CashSessionService.GetNextOpeningBalance(box));
+            }
+            catch (Exception ex)
+            {
+                SetText(UdOpenBal, "");
+                _app.StatusBar.SetText(ex.Message, BoMessageTime.bmt_Medium, BoStatusBarMessageType.smt_Warning);
             }
         }
 
@@ -282,11 +322,20 @@ namespace PettyCashAddon.Forms
                 return;
             }
 
-            if (pVal.BeforeAction || pVal.EventType != BoEventTypes.et_ITEM_PRESSED || !pVal.ActionSuccess)
+            if (pVal.BeforeAction)
                 return;
 
             try
             {
+                if (pVal.EventType == BoEventTypes.et_COMBO_SELECT && pVal.ItemUID == FormIds.CmbBox && _session == null)
+                {
+                    ShowOpeningForecast();
+                    return;
+                }
+
+                if (pVal.EventType != BoEventTypes.et_ITEM_PRESSED || !pVal.ActionSuccess)
+                    return;
+
                 if (pVal.ItemUID == FormIds.BtnOpen)
                     HandleOpen();
                 else if (pVal.ItemUID == FormIds.BtnAddTrans)
@@ -304,33 +353,38 @@ namespace PettyCashAddon.Forms
 
         private void HandleOpen()
         {
+            string boxCode = GetText(UdBox).Trim();
             string shiftCode = GetText(UdShift).Trim();
-            string cashier = GetText(UdCashier).Trim();
-
+            if (boxCode.Length == 0)
+            {
+                _app.MessageBox("Choisissez une caisse.");
+                return;
+            }
             if (shiftCode.Length == 0)
             {
                 _app.MessageBox("Sélectionnez le quart.");
                 return;
             }
-            if (cashier.Length == 0)
-            {
-                _app.MessageBox("Renseignez le nom du caissier.");
-                return;
-            }
 
             Shift shift = EnumCodes.ShiftFromCode(shiftCode);
-            double opening = CashSessionService.GetNextOpeningBalance();
+            string boxName = CashSessionService.CashBoxName(boxCode);
+            double expected = CashSessionService.GetNextOpeningBalance(boxCode);
+            SessionRow opened = null;
 
-            int answer = _app.MessageBox(
-                "Ouvrir la session " + ShiftLabel(shift) + " pour " + cashier + " ?\n\n" +
-                "Solde d'ouverture repris : " + CashSessionService.FormatAmount(opening) + "\n" +
-                "Vérifiez que ce montant correspond à l'argent présent dans la caisse.", 1, "Oui", "Non");
-            if (answer != 1)
-                return;
-
-            _session = CashSessionService.OpenSession(shift, cashier);
-            RefreshFromServer();
-            _app.StatusBar.SetText("Session ouverte, solde d'ouverture " + CashSessionService.FormatAmount(_session.OpenBal), BoMessageTime.bmt_Short, BoStatusBarMessageType.smt_Success);
+            _billForm.Show(
+                "Billetage d'ouverture",
+                boxName + " — " + ShiftLabel(shift) + " — " + CashSessionService.GetCurrentUser().Name,
+                expected,
+                "Confirmer l'ouverture de la session ?",
+                lines => opened = CashSessionService.OpenSession(boxCode, shift, lines),
+                () =>
+                {
+                    RefreshFromServer();
+                    string msg = "Session ouverte sur « " + boxName + " », solde d'ouverture " + CashSessionService.FormatAmount(opened.OpenBal);
+                    if (opened.OpenDiff != 0)
+                        msg += " (écart d'ouverture " + CashSessionService.FormatAmount(opened.OpenDiff) + " comptabilisé)";
+                    _app.StatusBar.SetText(msg, BoMessageTime.bmt_Medium, opened.OpenDiff == 0 ? BoStatusBarMessageType.smt_Success : BoStatusBarMessageType.smt_Warning);
+                });
         }
 
         private void HandleAddTrans()
@@ -350,41 +404,44 @@ namespace PettyCashAddon.Forms
             if (_session == null)
                 return;
 
-            string raw = GetText(UdCountBal).Trim();
-            if (!CashSessionService.TryParseAmount(raw, out double counted))
-            {
-                _app.MessageBox("Saisissez le solde compté (argent physiquement présent dans la caisse) avant de clôturer.");
-                return;
-            }
-
-            // Solde théorique relu depuis la base au cas où un autre poste aurait saisi entre-temps
+            // Solde théorique relu depuis la base avant le billetage
             RefreshFromServer();
             if (_session == null)
                 return;
-            SetAmount(UdCountBal, counted);
 
-            double expectedDiff = counted - _session.TheoBal;
-            int answer = _app.MessageBox(
-                "Solde théorique : " + CashSessionService.FormatAmount(_session.TheoBal) + "\n" +
-                "Solde compté : " + CashSessionService.FormatAmount(counted) + "\n" +
-                "Écart : " + CashSessionService.FormatAmount(expectedDiff) + (expectedDiff > 0 ? " (excédent)" : expectedDiff < 0 ? " (manquant)" : "") + "\n\n" +
-                "Confirmer la clôture de la session ? Elle ne pourra plus être modifiée.", 2, "Oui", "Non");
+            ShowCloseCount(_app, _billForm, _session, RefreshFromServer);
+        }
 
-            if (answer != 1)
-                return;
+        /// <summary>
+        /// Lance le billetage de clôture d'une session (aussi utilisé par le
+        /// rapport pour la clôture par un superutilisateur).
+        /// </summary>
+        internal static void ShowCloseCount(Application app, BillCountForm billForm, SessionRow session, Action afterClose)
+        {
+            if (!CashSessionService.CanClose(session))
+                throw new InvalidOperationException("Seul l'utilisateur qui a ouvert cette session (" + session.Cashier + ") ou un superutilisateur peut la clôturer.");
 
-            SessionRow closed = CashSessionService.CloseSession(_session.Code, counted);
-            RefreshFromServer();
-            _app.MessageBox(
-                "Session clôturée.\n\n" +
-                "Solde théorique : " + CashSessionService.FormatAmount(closed.TheoBal) + "\n" +
-                "Solde compté : " + CashSessionService.FormatAmount(closed.CountBal) + "\n" +
-                "Écart comptabilisé : " + CashSessionService.FormatAmount(closed.Diff));
+            SessionRow closed = null;
+            billForm.Show(
+                "Billetage de clôture",
+                CashSessionService.CashBoxName(session.CashBox) + " — " + ShiftLabel(session.Shift) + " — ouverte par " + session.Cashier,
+                session.TheoBal,
+                "Confirmer la clôture de la session ? Elle ne pourra plus être modifiée.",
+                lines => closed = CashSessionService.CloseSession(session.Code, lines),
+                () =>
+                {
+                    afterClose?.Invoke();
+                    app.MessageBox(
+                        "Session clôturée.\n\n" +
+                        "Solde théorique : " + CashSessionService.FormatAmount(closed.TheoBal) + "\n" +
+                        "Solde compté : " + CashSessionService.FormatAmount(closed.CountBal) + "\n" +
+                        "Écart comptabilisé : " + CashSessionService.FormatAmount(closed.Diff));
+                });
         }
 
         // ---------- Helpers ----------
 
-        private static string ShiftLabel(Shift shift)
+        internal static string ShiftLabel(Shift shift)
         {
             switch (shift)
             {
@@ -392,6 +449,13 @@ namespace PettyCashAddon.Forms
                 case Shift.Soir: return "Soir";
                 default: return "Matin";
             }
+        }
+
+        /// <summary>Quart proposé selon l'heure : matin avant 12 h, après-midi avant 18 h, soir ensuite.</summary>
+        private static string DefaultShiftCode()
+        {
+            int h = DateTime.Now.Hour;
+            return h < 12 ? "M" : h < 18 ? "A" : "S";
         }
 
         private void SetEnabled(string itemId, bool enabled)

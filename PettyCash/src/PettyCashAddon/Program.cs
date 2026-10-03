@@ -72,8 +72,10 @@ namespace PettyCashAddon
             Log("Tables et champs vérifiés");
             SboApplication.CreateMenus(_sboApplication);
 
-            _sessionController = new CashSessionFormController(_sboApplication);
-            _reportController = new CashReportFormController(_sboApplication);
+            // Écran de billetage partagé par la session (ouverture / clôture) et le rapport (clôture)
+            var billForm = new BillCountForm(_sboApplication);
+            _sessionController = new CashSessionFormController(_sboApplication, billForm);
+            _reportController = new CashReportFormController(_sboApplication, billForm, _sessionController.RefreshIfOpen);
 
             _sboApplication.MenuEvent += SboApplication_MenuEvent;
             _sboApplication.AppEvent += SboApplication_AppEvent;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using SAPbobsCOM;
 using PettyCashAddon.Core;
 using PettyCashAddon.Models;
@@ -13,12 +14,17 @@ namespace PettyCashAddon.Services
         public DateTime CashDate;
         public Shift Shift;
         public string Cashier;
+        public string UserCode;
+        public string CashBox;
+        public double ExpOpen;
+        public double OpenDiff;
         public double OpenBal;
         public double TheoBal;
         public double CountBal;
         public double Diff;
         public SessionStatus Status;
         public DateTime? ClosedAt;
+        public string ClosedBy;
     }
 
     internal class TransactionRow
@@ -49,29 +55,108 @@ namespace PettyCashAddon.Services
         public string DiffAccount;
     }
 
+    internal class CashBox
+    {
+        public string Code;
+        public string Name;
+        public string CashAccount;
+        public string DiffAccount;      // compte d'écarts effectif (propre à la caisse ou par défaut)
+        public bool Active;
+        public string OpenSessionCode;  // null si la caisse est libre
+        public string OpenedBy;         // nom de l'utilisateur qui l'occupe
+
+        public bool IsFree => Active && OpenSessionCode == null;
+    }
+
+    internal class Denomination
+    {
+        public string Code;
+        public string Name;
+        public double Value;
+        public string Kind;
+    }
+
+    internal class CountLine
+    {
+        public string DenomCode;
+        public string Label;
+        public double Value;
+        public int Qty;
+        public double Amount => Value * Qty;
+    }
+
+    internal class SapUser
+    {
+        public string Code;
+        public string Name;
+        public bool IsSuperUser;
+    }
+
     /// <summary>
-    /// Toute la logique métier de la caisse : ouverture de session, ajout
-    /// de transaction (avec comptabilisation immédiate), clôture avec
-    /// calcul d'écart. C'est le fichier qui fait référence pour comprendre
-    /// le comportement fonctionnel de l'add-on.
+    /// Toute la logique métier de la caisse. C'est le fichier qui fait
+    /// référence pour comprendre le comportement fonctionnel de l'add-on.
     ///
     /// Règles :
-    /// - une seule session ouverte à la fois ;
-    /// - solde d'ouverture = solde compté de la dernière session clôturée
-    ///   (ou, pour la toute première session, solde du compte G/L Caisse) ;
-    /// - solde théorique = ouverture + recettes - dépenses, recalculé depuis
-    ///   la base à chaque opération ;
+    /// - plusieurs caisses (table @PC_CASHBOX), chacune avec son compte G/L ;
+    /// - une session = une caisse + un utilisateur SAP + un quart ;
+    /// - une caisse n'a qu'une session ouverte, un utilisateur n'a qu'une
+    ///   session ouverte (verrous @PC_LOCK protégés par l'index unique SAP) ;
+    /// - billetage obligatoire à l'ouverture et à la clôture ; l'écart
+    ///   d'ouverture (billetage − solde repris) et l'écart de clôture
+    ///   (billetage − théorique) sont comptabilisés sur le compte d'écarts ;
+    /// - seul l'ouvreur saisit des opérations ; l'ouvreur ou un
+    ///   superutilisateur SAP peut clôturer ;
+    /// - solde d'ouverture attendu = compté de la dernière session de la
+    ///   caisse (ou, la première fois, solde du compte G/L de la caisse) ;
+    /// - solde théorique = ouverture + recettes − dépenses, recalculé en base ;
     /// - une dépense ne peut pas rendre le solde théorique négatif ;
-    /// - écriture comptable + ligne de caisse + mise à jour de session sont
-    ///   faites dans une même transaction DI API (tout ou rien).
+    /// - toute opération (écriture + lignes + session + verrous) est faite
+    ///   dans une même transaction DI API (tout ou rien).
     /// </summary>
     internal static class CashSessionService
     {
         // Longueurs maximales des champs SAP / UDF alimentés
         private const int MaxJeMemo = 50;        // OJDT.Memo, JDT1.LineMemo
         private const int MaxCashier = 50;
-        private const int MaxCardCode = 15;
         private const int MaxDescription = 100;
+        private const int DuplicateKeyError = -2035;
+
+        // ---------- Utilisateur connecté ----------
+
+        private static SapUser _currentUser;
+
+        /// <summary>Utilisateur SAP connecté (celui du client SAP B1 qui a lancé l'add-on).</summary>
+        public static SapUser GetCurrentUser()
+        {
+            if (_currentUser != null)
+                return _currentUser;
+
+            string code = DiCompany.Instance.UserName;
+            var user = new SapUser { Code = code, Name = code };
+            Recordset rs = NewRecordset();
+            try
+            {
+                rs.DoQuery("SELECT \"U_NAME\", \"SUPERUSER\" FROM \"OUSR\" WHERE \"USER_CODE\" = '" + Sql(code) + "'");
+                if (!rs.EoF)
+                {
+                    string name = Convert.ToString(rs.Fields.Item(0).Value).Trim();
+                    if (name.Length > 0)
+                        user.Name = name;
+                    user.IsSuperUser = Convert.ToString(rs.Fields.Item(1).Value) == "Y";
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+            _currentUser = user;
+            return user;
+        }
+
+        private static bool SameUser(string a, string b)
+        {
+            return string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+        }
 
         // ---------- Paramétrage ----------
 
@@ -83,13 +168,11 @@ namespace PettyCashAddon.Services
                 if (!table.GetByKey(Db.SettingsCode))
                     throw new InvalidOperationException("Paramétrage caisse introuvable (table @" + Db.SettingsTable + ").");
 
-                string cashAcct = Convert.ToString(table.UserFields.Fields.Item(Db.F_CashAcct).Value).Trim();
-                string diffAcct = Convert.ToString(table.UserFields.Fields.Item(Db.F_DiffAcct).Value).Trim();
-
-                if (string.IsNullOrEmpty(cashAcct) || string.IsNullOrEmpty(diffAcct))
-                    throw new InvalidOperationException("Renseignez les comptes G/L (U_CashAcct, U_DiffAcct) dans @" + Db.SettingsTable + " avant d'utiliser la caisse.");
-
-                return new CashSettings { CashAccount = cashAcct, DiffAccount = diffAcct };
+                return new CashSettings
+                {
+                    CashAccount = Convert.ToString(table.UserFields.Fields.Item(Db.F_CashAcct).Value).Trim(),
+                    DiffAccount = Convert.ToString(table.UserFields.Fields.Item(Db.F_DiffAcct).Value).Trim()
+                };
             }
             finally
             {
@@ -128,24 +211,246 @@ namespace PettyCashAddon.Services
             return result;
         }
 
-        // ---------- Sessions ----------
+        // ---------- Caisses ----------
 
-        public static SessionRow GetOpenSession()
+        /// <summary>Caisses avec, pour chacune, la session qui l'occupe éventuellement.</summary>
+        public static List<CashBox> GetCashBoxes(bool activeOnly)
         {
+            string defaultDiff = GetSettings().DiffAccount;
+            var result = new List<CashBox>();
             Recordset rs = NewRecordset();
             try
             {
-                string sql = "SELECT \"Code\" FROM \"@" + Db.SessionTable + "\" WHERE \"" + Db.F_Session_Status + "\" = 'O' ORDER BY \"Code\" DESC";
+                string sql = "SELECT B.\"Code\", B.\"Name\", B.\"" + Db.F_Box_CashAcct + "\", B.\"" + Db.F_Box_DiffAcct + "\", B.\"" + Db.F_Box_Active + "\", " +
+                             "S.\"Code\", S.\"" + Db.F_Session_Cashier + "\" " +
+                             "FROM \"@" + Db.CashBoxTable + "\" B " +
+                             "LEFT JOIN \"@" + Db.SessionTable + "\" S ON S.\"" + Db.F_Session_CashBox + "\" = B.\"Code\" AND S.\"" + Db.F_Session_Status + "\" = 'O' " +
+                             (activeOnly ? "WHERE B.\"" + Db.F_Box_Active + "\" = 'Y' " : "") +
+                             "ORDER BY B.\"Name\", S.\"Code\" DESC";
                 rs.DoQuery(sql);
-                if (rs.EoF)
-                    return null;
-                string code = Convert.ToString(rs.Fields.Item(0).Value);
-                return LoadSession(code);
+                while (!rs.EoF)
+                {
+                    string code = Convert.ToString(rs.Fields.Item(0).Value);
+                    if (!result.Any(b => b.Code == code))
+                    {
+                        string boxDiff = Convert.ToString(rs.Fields.Item(3).Value).Trim();
+                        string sessCode = Convert.ToString(rs.Fields.Item(5).Value);
+                        result.Add(new CashBox
+                        {
+                            Code = code,
+                            Name = Convert.ToString(rs.Fields.Item(1).Value),
+                            CashAccount = Convert.ToString(rs.Fields.Item(2).Value).Trim(),
+                            DiffAccount = boxDiff.Length > 0 ? boxDiff : defaultDiff,
+                            Active = Convert.ToString(rs.Fields.Item(4).Value) == "Y",
+                            OpenSessionCode = string.IsNullOrEmpty(sessCode) ? null : sessCode,
+                            OpenedBy = Convert.ToString(rs.Fields.Item(6).Value)
+                        });
+                    }
+                    rs.MoveNext();
+                }
             }
             finally
             {
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
             }
+            return result;
+        }
+
+        public static CashBox GetCashBox(string code)
+        {
+            return GetCashBoxes(false).FirstOrDefault(b => b.Code == code);
+        }
+
+        private static CashBox RequireCashBoxAccounts(string code)
+        {
+            CashBox box = GetCashBox(code);
+            if (box == null)
+                throw new InvalidOperationException("Caisse « " + code + " » introuvable (table @" + Db.CashBoxTable + ").");
+            if (string.IsNullOrEmpty(box.CashAccount))
+                throw new InvalidOperationException("Aucun compte G/L n'est paramétré pour la caisse « " + box.Name + " ».");
+            if (string.IsNullOrEmpty(box.DiffAccount))
+                throw new InvalidOperationException("Renseignez le compte d'écarts de caisse (U_DiffAcct) dans @" + Db.SettingsTable + " ou sur la caisse « " + box.Name + " ».");
+            return box;
+        }
+
+        // ---------- Coupures et billetage ----------
+
+        public static List<Denomination> GetDenominations()
+        {
+            var result = new List<Denomination>();
+            Recordset rs = NewRecordset();
+            try
+            {
+                rs.DoQuery("SELECT \"Code\", \"Name\", \"" + Db.F_Denom_Value + "\", \"" + Db.F_Denom_Kind + "\" FROM \"@" + Db.DenomTable + "\" " +
+                           "WHERE \"" + Db.F_Denom_Active + "\" = 'Y' ORDER BY \"" + Db.F_Denom_Kind + "\", \"" + Db.F_Denom_Value + "\" DESC");
+                while (!rs.EoF)
+                {
+                    result.Add(new Denomination
+                    {
+                        Code = Convert.ToString(rs.Fields.Item(0).Value),
+                        Name = Convert.ToString(rs.Fields.Item(1).Value),
+                        Value = Convert.ToDouble(rs.Fields.Item(2).Value),
+                        Kind = Convert.ToString(rs.Fields.Item(3).Value)
+                    });
+                    rs.MoveNext();
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+            return result;
+        }
+
+        /// <summary>Lignes de billetage d'une session pour une phase ('O' ouverture, 'C' clôture).</summary>
+        public static List<CountLine> GetCountLines(string sessionCode, string phase)
+        {
+            var result = new List<CountLine>();
+            Recordset rs = NewRecordset();
+            try
+            {
+                rs.DoQuery("SELECT C.\"" + Db.F_Count_Denom + "\", COALESCE(D.\"Name\", C.\"" + Db.F_Count_Denom + "\"), C.\"" + Db.F_Count_Value + "\", C.\"" + Db.F_Count_Qty + "\" " +
+                           "FROM \"@" + Db.CountTable + "\" C LEFT JOIN \"@" + Db.DenomTable + "\" D ON D.\"Code\" = C.\"" + Db.F_Count_Denom + "\" " +
+                           "WHERE C.\"" + Db.F_Count_Session + "\" = '" + Sql(sessionCode) + "' AND C.\"" + Db.F_Count_Phase + "\" = '" + Sql(phase) + "' " +
+                           "ORDER BY C.\"" + Db.F_Count_Value + "\" DESC, C.\"" + Db.F_Count_Denom + "\"");
+                while (!rs.EoF)
+                {
+                    result.Add(new CountLine
+                    {
+                        DenomCode = Convert.ToString(rs.Fields.Item(0).Value),
+                        Label = Convert.ToString(rs.Fields.Item(1).Value),
+                        Value = Convert.ToDouble(rs.Fields.Item(2).Value),
+                        Qty = Convert.ToInt32(rs.Fields.Item(3).Value)
+                    });
+                    rs.MoveNext();
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+            return result;
+        }
+
+        private static double CountTotal(List<CountLine> lines)
+        {
+            if (lines == null)
+                throw new ArgumentException("Le billetage est obligatoire.");
+            if (lines.Any(l => l.Qty < 0))
+                throw new ArgumentException("Une quantité de billetage ne peut pas être négative.");
+            return Round(lines.Sum(l => l.Amount));
+        }
+
+        private static void SaveCountLines(string sessionCode, string phase, List<CountLine> lines)
+        {
+            foreach (var line in lines.Where(l => l.Qty > 0))
+            {
+                UserTable table = DiCompany.Instance.UserTables.Item(Db.CountTable);
+                try
+                {
+                    string code = sessionCode + phase + line.DenomCode;
+                    table.Code = code;
+                    table.Name = code;
+                    table.UserFields.Fields.Item(Db.F_Count_Session).Value = sessionCode;
+                    table.UserFields.Fields.Item(Db.F_Count_Phase).Value = phase;
+                    table.UserFields.Fields.Item(Db.F_Count_Denom).Value = line.DenomCode;
+                    table.UserFields.Fields.Item(Db.F_Count_Value).Value = line.Value;
+                    table.UserFields.Fields.Item(Db.F_Count_Qty).Value = line.Qty;
+                    table.UserFields.Fields.Item(Db.F_Count_Amount).Value = Round(line.Amount);
+                    DiCompany.ThrowIfError(table.Add(), "Enregistrement du billetage");
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+        }
+
+        // ---------- Verrous ----------
+
+        private static string CashBoxLockKey(string cashBox) { return "CB:" + cashBox; }
+        private static string UserLockKey(string userCode) { return "US:" + userCode.ToUpperInvariant(); }
+
+        /// <summary>Pose un verrou ; false si la clé existe déjà (index unique SAP).</summary>
+        private static bool TryAddLock(string key, string sessionCode)
+        {
+            Company company = DiCompany.Instance;
+            UserTable table = company.UserTables.Item(Db.LockTable);
+            try
+            {
+                table.Code = key;
+                table.Name = key;
+                table.UserFields.Fields.Item(Db.F_Lock_Session).Value = sessionCode;
+                int rc = table.Add();
+                if (rc == 0)
+                    return true;
+                company.GetLastError(out int errCode, out string errMsg);
+                if (errCode == DuplicateKeyError)
+                    return false;
+                throw new InvalidOperationException("Pose du verrou " + key + " : [" + errCode + "] " + errMsg);
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+            }
+        }
+
+        private static void RemoveLock(string key)
+        {
+            UserTable table = DiCompany.Instance.UserTables.Item(Db.LockTable);
+            try
+            {
+                if (table.GetByKey(key))
+                    DiCompany.ThrowIfError(table.Remove(), "Suppression du verrou " + key);
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+            }
+        }
+
+        private static List<string> GetLockKeys(string sessionCode)
+        {
+            var keys = new List<string>();
+            Recordset rs = NewRecordset();
+            try
+            {
+                rs.DoQuery("SELECT \"Code\" FROM \"@" + Db.LockTable + "\" WHERE \"" + Db.F_Lock_Session + "\" = '" + Sql(sessionCode) + "'");
+                while (!rs.EoF)
+                {
+                    keys.Add(Convert.ToString(rs.Fields.Item(0).Value));
+                    rs.MoveNext();
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+            return keys;
+        }
+
+        /// <summary>
+        /// Supprime un verrou dont la session n'est plus ouverte (session
+        /// clôturée ou supprimée hors de l'add-on) pour ne pas bloquer une caisse.
+        /// </summary>
+        private static void ReleaseStaleLock(string key)
+        {
+            string sessionCode = Scalar("SELECT \"" + Db.F_Lock_Session + "\" FROM \"@" + Db.LockTable + "\" WHERE \"Code\" = '" + Sql(key) + "'");
+            if (sessionCode == null)
+                return;
+            SessionRow session = LoadSession(sessionCode);
+            if (session == null || session.Status != SessionStatus.Open)
+                RemoveLock(key);
+        }
+
+        // ---------- Sessions ----------
+
+        /// <summary>Session ouverte de l'utilisateur (null s'il n'en a pas).</summary>
+        public static SessionRow GetOpenSessionForUser(string userCode)
+        {
+            string code = Scalar("SELECT \"Code\" FROM \"@" + Db.SessionTable + "\" WHERE \"" + Db.F_Session_Status + "\" = 'O' " +
+                                 "AND UPPER(\"" + Db.F_Session_User + "\") = '" + Sql(userCode.ToUpperInvariant()) + "' ORDER BY \"Code\" DESC");
+            return code == null ? null : LoadSession(code);
         }
 
         public static SessionRow LoadSession(string code)
@@ -172,102 +477,129 @@ namespace PettyCashAddon.Services
             if (closedAtVal is DateTime dt && dt.Year > 1900)
                 closedAt = dt;
 
+            Fields f = table.UserFields.Fields;
             return new SessionRow
             {
                 Code = table.Code,
-                CashDate = Convert.ToDateTime(table.UserFields.Fields.Item(Db.F_Session_Date).Value),
-                Shift = EnumCodes.ShiftFromCode(Convert.ToString(table.UserFields.Fields.Item(Db.F_Session_Shift).Value)),
-                Cashier = Convert.ToString(table.UserFields.Fields.Item(Db.F_Session_Cashier).Value),
-                OpenBal = Convert.ToDouble(table.UserFields.Fields.Item(Db.F_Session_OpenBal).Value),
-                TheoBal = Convert.ToDouble(table.UserFields.Fields.Item(Db.F_Session_TheoBal).Value),
-                CountBal = Convert.ToDouble(table.UserFields.Fields.Item(Db.F_Session_CountBal).Value),
-                Diff = Convert.ToDouble(table.UserFields.Fields.Item(Db.F_Session_Diff).Value),
-                Status = EnumCodes.StatusFromCode(Convert.ToString(table.UserFields.Fields.Item(Db.F_Session_Status).Value)),
-                ClosedAt = closedAt
+                CashDate = Convert.ToDateTime(f.Item(Db.F_Session_Date).Value),
+                Shift = EnumCodes.ShiftFromCode(Convert.ToString(f.Item(Db.F_Session_Shift).Value)),
+                Cashier = Convert.ToString(f.Item(Db.F_Session_Cashier).Value),
+                UserCode = Convert.ToString(f.Item(Db.F_Session_User).Value),
+                CashBox = Convert.ToString(f.Item(Db.F_Session_CashBox).Value),
+                ExpOpen = Convert.ToDouble(f.Item(Db.F_Session_ExpOpen).Value),
+                OpenDiff = Convert.ToDouble(f.Item(Db.F_Session_OpenDiff).Value),
+                OpenBal = Convert.ToDouble(f.Item(Db.F_Session_OpenBal).Value),
+                TheoBal = Convert.ToDouble(f.Item(Db.F_Session_TheoBal).Value),
+                CountBal = Convert.ToDouble(f.Item(Db.F_Session_CountBal).Value),
+                Diff = Convert.ToDouble(f.Item(Db.F_Session_Diff).Value),
+                Status = EnumCodes.StatusFromCode(Convert.ToString(f.Item(Db.F_Session_Status).Value)),
+                ClosedAt = closedAt,
+                ClosedBy = Convert.ToString(f.Item(Db.F_Session_ClosedBy).Value)
             };
         }
 
         /// <summary>
-        /// Solde d'ouverture qui sera repris à la prochaine ouverture de
-        /// session : solde compté de la dernière session clôturée, ou, s'il
-        /// n'y en a encore aucune, solde actuel du compte G/L Caisse (le
-        /// fonds de caisse initial doit donc y avoir été comptabilisé).
+        /// Solde attendu à la prochaine ouverture de la caisse : solde compté de
+        /// sa dernière session clôturée, ou, s'il n'y en a encore aucune, solde
+        /// actuel de son compte G/L (le fonds initial doit y être comptabilisé).
         /// </summary>
-        public static double GetNextOpeningBalance()
+        public static double GetNextOpeningBalance(string cashBoxCode)
         {
-            double? last = GetLastClosingBalance();
-            if (last.HasValue)
-                return last.Value;
+            string last = Scalar("SELECT TOP 1 \"" + Db.F_Session_CountBal + "\" FROM \"@" + Db.SessionTable + "\" " +
+                                 "WHERE \"" + Db.F_Session_Status + "\" = 'C' AND \"" + Db.F_Session_CashBox + "\" = '" + Sql(cashBoxCode) + "' " +
+                                 "ORDER BY \"Code\" DESC");
+            if (last != null)
+                return Round(Convert.ToDouble(last, CultureInfo.InvariantCulture));
 
-            return GetAccountBalance(GetSettings().CashAccount);
+            CashBox box = GetCashBox(cashBoxCode);
+            if (box == null)
+                throw new InvalidOperationException("Caisse « " + cashBoxCode + " » introuvable.");
+            return Round(GetAccountBalance(box.CashAccount));
         }
 
         /// <summary>
-        /// Ouvre une nouvelle session avec le solde d'ouverture calculé par
-        /// GetNextOpeningBalance.
+        /// Ouvre une session sur une caisse libre pour l'utilisateur connecté.
+        /// Le solde d'ouverture est le billetage saisi ; s'il diffère du solde
+        /// attendu, l'écart d'ouverture est comptabilisé.
         /// </summary>
-        public static SessionRow OpenSession(Shift shift, string cashier)
+        public static SessionRow OpenSession(string cashBoxCode, Shift shift, List<CountLine> openingCount)
         {
-            if (string.IsNullOrWhiteSpace(cashier))
-                throw new ArgumentException("Renseignez le nom du caissier.");
-            if (GetOpenSession() != null)
-                throw new InvalidOperationException("Une session de caisse est déjà ouverte. Clôturez-la avant d'en ouvrir une nouvelle.");
+            SapUser user = GetCurrentUser();
+            CashBox box = RequireCashBoxAccounts(cashBoxCode);
+            if (!box.Active)
+                throw new InvalidOperationException("La caisse « " + box.Name + " » est désactivée.");
 
-            double openingBalance = Round(GetNextOpeningBalance());
+            SessionRow mine = GetOpenSessionForUser(user.Code);
+            if (mine != null)
+                throw new InvalidOperationException("Vous avez déjà une session ouverte sur la caisse « " + CashBoxName(mine.CashBox) +
+                                                    " ». Clôturez-la avant d'en ouvrir une autre.");
+            if (box.OpenSessionCode != null)
+                throw new InvalidOperationException("La caisse « " + box.Name + " » est déjà ouverte par " + box.OpenedBy + ".");
+
+            double counted = CountTotal(openingCount);
+            double expected = GetNextOpeningBalance(box.Code);
+            double openDiff = Round(counted - expected);
+
+            ReleaseStaleLock(CashBoxLockKey(box.Code));
+            ReleaseStaleLock(UserLockKey(user.Code));
 
             string code = DateTime.Now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-
-            UserTable table = DiCompany.Instance.UserTables.Item(Db.SessionTable);
+            Company company = DiCompany.Instance;
+            company.StartTransaction();
             try
             {
-                table.Code = code;
-                // SAP pose un index unique sur Name (comme sur Code) : on y met le Code,
-                // sinon deux sessions même jour / même quart / même caissier se heurtent.
-                table.Name = code;
-                table.UserFields.Fields.Item(Db.F_Session_Date).Value = DateTime.Today;
-                table.UserFields.Fields.Item(Db.F_Session_Shift).Value = EnumCodes.ToCode(shift);
-                table.UserFields.Fields.Item(Db.F_Session_Cashier).Value = Truncate(cashier.Trim(), MaxCashier);
-                table.UserFields.Fields.Item(Db.F_Session_OpenBal).Value = openingBalance;
-                table.UserFields.Fields.Item(Db.F_Session_TheoBal).Value = openingBalance;
-                table.UserFields.Fields.Item(Db.F_Session_CountBal).Value = 0;
-                table.UserFields.Fields.Item(Db.F_Session_Diff).Value = 0;
-                table.UserFields.Fields.Item(Db.F_Session_Status).Value = "O";
+                if (!TryAddLock(CashBoxLockKey(box.Code), code))
+                    throw new InvalidOperationException("La caisse « " + box.Name + " » vient d'être ouverte par un autre utilisateur. Choisissez une autre caisse.");
+                if (!TryAddLock(UserLockKey(user.Code), code))
+                    throw new InvalidOperationException("Vous avez déjà une session ouverte sur une autre caisse. Clôturez-la avant d'en ouvrir une autre.");
 
-                int rc = table.Add();
-                DiCompany.ThrowIfError(rc, "Ouverture de la session de caisse");
+                if (openDiff > 0)
+                    PostJournalEntry(box.CashAccount, box.DiffAccount, openDiff, "Caisse ecart ouverture (excedent) " + box.Code, code);
+                else if (openDiff < 0)
+                    PostJournalEntry(box.DiffAccount, box.CashAccount, -openDiff, "Caisse ecart ouverture (manquant) " + box.Code, code);
+
+                UserTable table = company.UserTables.Item(Db.SessionTable);
+                try
+                {
+                    Fields f = table.UserFields.Fields;
+                    table.Code = code;
+                    table.Name = code;   // index unique SAP sur Name
+                    f.Item(Db.F_Session_Date).Value = DateTime.Today;
+                    f.Item(Db.F_Session_Shift).Value = EnumCodes.ToCode(shift);
+                    f.Item(Db.F_Session_Cashier).Value = Truncate(user.Name, MaxCashier);
+                    f.Item(Db.F_Session_User).Value = user.Code;
+                    f.Item(Db.F_Session_CashBox).Value = box.Code;
+                    f.Item(Db.F_Session_ExpOpen).Value = expected;
+                    f.Item(Db.F_Session_OpenDiff).Value = openDiff;
+                    f.Item(Db.F_Session_OpenBal).Value = counted;
+                    f.Item(Db.F_Session_TheoBal).Value = counted;
+                    f.Item(Db.F_Session_CountBal).Value = 0;
+                    f.Item(Db.F_Session_Diff).Value = 0;
+                    f.Item(Db.F_Session_Status).Value = "O";
+                    DiCompany.ThrowIfError(table.Add(), "Ouverture de la session de caisse");
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+
+                SaveCountLines(code, "O", openingCount);
+
+                company.EndTransaction(BoWfTransOpt.wf_Commit);
             }
-            finally
+            catch
             {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                if (company.InTransaction)
+                    company.EndTransaction(BoWfTransOpt.wf_RollBack);
+                throw;
             }
 
             return LoadSession(code);
         }
 
-        private static double? GetLastClosingBalance()
+        public static string CashBoxName(string cashBoxCode)
         {
-            Recordset rs = NewRecordset();
-            try
-            {
-                // Le Code est l'horodatage d'ouverture (yyyyMMddHHmmss) et une seule
-                // session est ouverte à la fois : trier sur le Code donne bien la
-                // dernière session. U_ClosedAt ne porte que la date (pas l'heure),
-                // il ne permet pas de départager plusieurs quarts d'une même journée.
-                string sql = "SELECT TOP 1 \"" + Db.F_Session_CountBal + "\" " +
-                             "FROM \"@" + Db.SessionTable + "\" WHERE \"" + Db.F_Session_Status + "\" = 'C' " +
-                             "ORDER BY \"Code\" DESC";
-                rs.DoQuery(sql);
-                if (rs.EoF)
-                    return null;
-
-                // Après clôture, l'écart a été comptabilisé : le solde réel de la
-                // caisse est le solde compté, y compris lorsqu'il vaut 0.
-                return Convert.ToDouble(rs.Fields.Item(0).Value);
-            }
-            finally
-            {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
-            }
+            return Scalar("SELECT \"Name\" FROM \"@" + Db.CashBoxTable + "\" WHERE \"Code\" = '" + Sql(cashBoxCode) + "'") ?? cashBoxCode;
         }
 
         /// <summary>
@@ -275,26 +607,16 @@ namespace PettyCashAddon.Services
         /// </summary>
         private static double ComputeTheoBalance(SessionRow session)
         {
-            Recordset rs = NewRecordset();
-            try
-            {
-                string sql = "SELECT COALESCE(SUM(CASE WHEN \"" + Db.F_Trans_Dir + "\" = 'R' THEN \"" + Db.F_Trans_Amount + "\" " +
-                             "ELSE -\"" + Db.F_Trans_Amount + "\" END), 0) " +
-                             "FROM \"@" + Db.TransTable + "\" WHERE \"" + Db.F_Trans_Session + "\" = '" + Sql(session.Code) + "'";
-                rs.DoQuery(sql);
-                return Round(session.OpenBal + Convert.ToDouble(rs.Fields.Item(0).Value));
-            }
-            finally
-            {
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
-            }
+            string sum = Scalar("SELECT COALESCE(SUM(CASE WHEN \"" + Db.F_Trans_Dir + "\" = 'R' THEN \"" + Db.F_Trans_Amount + "\" " +
+                                "ELSE -\"" + Db.F_Trans_Amount + "\" END), 0) " +
+                                "FROM \"@" + Db.TransTable + "\" WHERE \"" + Db.F_Trans_Session + "\" = '" + Sql(session.Code) + "'");
+            return Round(session.OpenBal + Convert.ToDouble(sum, CultureInfo.InvariantCulture));
         }
 
         /// <summary>
-        /// Ajoute une transaction à la session ouverte : comptabilise
-        /// l'écriture au journal (Caisse vs compte G/L du type d'opération),
-        /// enregistre la ligne et met à jour le solde théorique, le tout dans
-        /// une même transaction DI API.
+        /// Ajoute une transaction à une session ouverte de l'utilisateur
+        /// connecté : écriture au journal (caisse vs compte du type), ligne de
+        /// caisse et solde théorique, dans une même transaction DI API.
         /// </summary>
         public static void AddTransaction(string sessionCode, Direction direction, TransactionType type, double amount, string cardCode, string description)
         {
@@ -303,6 +625,12 @@ namespace PettyCashAddon.Services
                 throw new InvalidOperationException("Session de caisse introuvable.");
             if (session.Status != SessionStatus.Open)
                 throw new InvalidOperationException("Cette session est clôturée, impossible d'ajouter une transaction.");
+
+            SapUser user = GetCurrentUser();
+            bool legacyNoOwner = string.IsNullOrEmpty(session.UserCode) && user.IsSuperUser;
+            if (!SameUser(session.UserCode, user.Code) && !legacyNoOwner)
+                throw new InvalidOperationException("Seul l'utilisateur qui a ouvert cette session (" + session.Cashier + ") peut y saisir des opérations.");
+
             if (type == null)
                 throw new ArgumentException("Sélectionnez un type d'opération.");
             if (type.Direction != direction)
@@ -320,7 +648,7 @@ namespace PettyCashAddon.Services
 
             description = Truncate((description ?? "").Trim(), MaxDescription);
 
-            CashSettings settings = GetSettings();
+            CashBox box = RequireCashBoxAccounts(session.CashBox);
 
             double theoBefore = ComputeTheoBalance(session);
             double theoAfter = Round(theoBefore + (direction == Direction.Recette ? amount : -amount));
@@ -335,8 +663,8 @@ namespace PettyCashAddon.Services
             try
             {
                 string jeDocEntry = PostJournalEntry(
-                    direction == Direction.Recette ? settings.CashAccount : type.GlAccount,
-                    direction == Direction.Recette ? type.GlAccount : settings.CashAccount,
+                    direction == Direction.Recette ? box.CashAccount : type.GlAccount,
+                    direction == Direction.Recette ? type.GlAccount : box.CashAccount,
                     amount, memo, session.Code);
 
                 string code = DateTime.Now.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
@@ -344,7 +672,7 @@ namespace PettyCashAddon.Services
                 try
                 {
                     table.Code = code;
-                    // Index unique sur Name : "type + montant" provoquait l'erreur -2035
+                    // Index unique SAP sur Name : "type + montant" provoquait l'erreur -2035
                     // dès qu'une même opération du même montant était ressaisie.
                     table.Name = code;
                     table.UserFields.Fields.Item(Db.F_Trans_Session).Value = session.Code;
@@ -364,7 +692,7 @@ namespace PettyCashAddon.Services
                     System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
                 }
 
-                UpdateSessionFields(session.Code, theoAfter, null, null, false);
+                UpdateSessionFields(session.Code, theoAfter, null, null, null);
 
                 company.EndTransaction(BoWfTransOpt.wf_Commit);
             }
@@ -376,23 +704,31 @@ namespace PettyCashAddon.Services
             }
         }
 
+        /// <summary>Indique si l'utilisateur connecté peut clôturer cette session.</summary>
+        public static bool CanClose(SessionRow session)
+        {
+            SapUser user = GetCurrentUser();
+            return session != null && session.Status == SessionStatus.Open &&
+                   (SameUser(session.UserCode, user.Code) || user.IsSuperUser);
+        }
+
         /// <summary>
-        /// Clôture la session : enregistre le solde compté, calcule l'écart
-        /// par rapport au solde théorique recalculé et, s'il est non nul, le
-        /// comptabilise sur le compte d'écart dédié.
+        /// Clôture la session : le billetage donne le solde compté, l'écart avec
+        /// le théorique recalculé est comptabilisé, la caisse est libérée.
+        /// Réservé à l'ouvreur ou à un superutilisateur SAP.
         /// </summary>
-        public static SessionRow CloseSession(string sessionCode, double countedBalance)
+        public static SessionRow CloseSession(string sessionCode, List<CountLine> closingCount)
         {
             SessionRow session = LoadSession(sessionCode);
             if (session == null)
                 throw new InvalidOperationException("Session de caisse introuvable.");
             if (session.Status != SessionStatus.Open)
                 throw new InvalidOperationException("Cette session est déjà clôturée.");
+            if (!CanClose(session))
+                throw new InvalidOperationException("Seul l'utilisateur qui a ouvert cette session (" + session.Cashier + ") ou un superutilisateur peut la clôturer.");
 
-            countedBalance = Round(countedBalance);
-            if (countedBalance < 0)
-                throw new ArgumentException("Le solde compté ne peut pas être négatif.");
-
+            double countedBalance = CountTotal(closingCount);
+            CashBox box = RequireCashBoxAccounts(session.CashBox);
             double theo = ComputeTheoBalance(session);
             double diff = Round(countedBalance - theo);
 
@@ -400,18 +736,18 @@ namespace PettyCashAddon.Services
             company.StartTransaction();
             try
             {
-                if (diff != 0)
-                {
-                    CashSettings settings = GetSettings();
-                    // Excédent (compté > théorique) : Débit Caisse / Crédit Écarts.
-                    // Manquant (compté < théorique) : Débit Écarts / Crédit Caisse.
-                    if (diff > 0)
-                        PostJournalEntry(settings.CashAccount, settings.DiffAccount, diff, "Caisse ecart cloture (excedent)", session.Code);
-                    else
-                        PostJournalEntry(settings.DiffAccount, settings.CashAccount, -diff, "Caisse ecart cloture (manquant)", session.Code);
-                }
+                // Excédent (compté > théorique) : Débit Caisse / Crédit Écarts.
+                // Manquant (compté < théorique) : Débit Écarts / Crédit Caisse.
+                if (diff > 0)
+                    PostJournalEntry(box.CashAccount, box.DiffAccount, diff, "Caisse ecart cloture (excedent) " + box.Code, session.Code);
+                else if (diff < 0)
+                    PostJournalEntry(box.DiffAccount, box.CashAccount, -diff, "Caisse ecart cloture (manquant) " + box.Code, session.Code);
 
-                UpdateSessionFields(session.Code, theo, countedBalance, diff, true);
+                UpdateSessionFields(session.Code, theo, countedBalance, diff, GetCurrentUser().Code);
+                SaveCountLines(session.Code, "C", closingCount);
+
+                foreach (string key in GetLockKeys(session.Code))
+                    RemoveLock(key);
 
                 company.EndTransaction(BoWfTransOpt.wf_Commit);
             }
@@ -425,7 +761,8 @@ namespace PettyCashAddon.Services
             return LoadSession(session.Code);
         }
 
-        private static void UpdateSessionFields(string sessionCode, double theoBalance, double? countedBalance, double? diff, bool close)
+        /// <summary>Mise à jour de la session ; closedBy non null = clôture.</summary>
+        private static void UpdateSessionFields(string sessionCode, double theoBalance, double? countedBalance, double? diff, string closedBy)
         {
             UserTable table = DiCompany.Instance.UserTables.Item(Db.SessionTable);
             try
@@ -438,14 +775,15 @@ namespace PettyCashAddon.Services
                     table.UserFields.Fields.Item(Db.F_Session_CountBal).Value = countedBalance.Value;
                 if (diff.HasValue)
                     table.UserFields.Fields.Item(Db.F_Session_Diff).Value = diff.Value;
-                if (close)
+                if (closedBy != null)
                 {
                     table.UserFields.Fields.Item(Db.F_Session_Status).Value = "C";
                     table.UserFields.Fields.Item(Db.F_Session_ClosedAt).Value = DateTime.Today;
+                    table.UserFields.Fields.Item(Db.F_Session_ClosedBy).Value = closedBy;
                 }
 
                 int rc = table.Update();
-                DiCompany.ThrowIfError(rc, close ? "Clôture de la session de caisse" : "Mise à jour du solde théorique de la session");
+                DiCompany.ThrowIfError(rc, closedBy != null ? "Clôture de la session de caisse" : "Mise à jour du solde théorique de la session");
             }
             finally
             {
@@ -496,11 +834,11 @@ namespace PettyCashAddon.Services
             return result;
         }
 
-        // ---------- Rapport ----------
+        // ---------- Rapports ----------
 
-        public static List<SessionRow> GetSessions(DateTime from, DateTime to, Shift? shiftFilter)
+        public static List<SessionRow> GetSessions(DateTime from, DateTime to, Shift? shiftFilter, string cashBoxFilter = null)
         {
-            var result = new List<SessionRow>();
+            var codes = new List<string>();
             Recordset rs = NewRecordset();
             try
             {
@@ -509,25 +847,193 @@ namespace PettyCashAddon.Services
                              "AND \"" + Db.F_Session_Date + "\" <= '" + to.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "'";
                 if (shiftFilter.HasValue)
                     sql += " AND \"" + Db.F_Session_Shift + "\" = '" + EnumCodes.ToCode(shiftFilter.Value) + "'";
+                if (!string.IsNullOrEmpty(cashBoxFilter))
+                    sql += " AND \"" + Db.F_Session_CashBox + "\" = '" + Sql(cashBoxFilter) + "'";
                 // Code = horodatage d'ouverture : ordre chronologique inverse
                 sql += " ORDER BY \"Code\" DESC";
 
                 rs.DoQuery(sql);
-                var codes = new List<string>();
                 while (!rs.EoF)
                 {
                     codes.Add(Convert.ToString(rs.Fields.Item(0).Value));
                     rs.MoveNext();
                 }
-
-                foreach (var code in codes)
-                    result.Add(LoadSession(code));
             }
             finally
             {
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
             }
-            return result;
+            return codes.Select(LoadSession).ToList();
+        }
+
+        /// <summary>Utilisateurs ayant déjà tenu une session (filtre du rapport) : code -> nom.</summary>
+        public static List<KeyValuePair<string, string>> GetSessionUsers()
+        {
+            var result = new List<KeyValuePair<string, string>>();
+            Recordset rs = NewRecordset();
+            try
+            {
+                rs.DoQuery("SELECT DISTINCT S.\"" + Db.F_Session_User + "\", COALESCE(U.\"U_NAME\", S.\"" + Db.F_Session_User + "\") " +
+                           "FROM \"@" + Db.SessionTable + "\" S LEFT JOIN \"OUSR\" U ON U.\"USER_CODE\" = S.\"" + Db.F_Session_User + "\" " +
+                           "WHERE COALESCE(S.\"" + Db.F_Session_User + "\", '') <> ''");
+                while (!rs.EoF)
+                {
+                    result.Add(new KeyValuePair<string, string>(Convert.ToString(rs.Fields.Item(0).Value), Convert.ToString(rs.Fields.Item(1).Value)));
+                    rs.MoveNext();
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+            return result.OrderBy(kv => kv.Value).ToList();
+        }
+
+        /// <summary>Filtre WHERE commun aux requêtes de rapport (alias S = sessions).</summary>
+        private static string ReportWhere(DateTime from, DateTime to, string cashBox, string userCode, Shift? shift)
+        {
+            string where = "WHERE S.\"" + Db.F_Session_Date + "\" >= '" + from.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "' " +
+                           "AND S.\"" + Db.F_Session_Date + "\" <= '" + to.ToString("yyyyMMdd", CultureInfo.InvariantCulture) + "' ";
+            if (!string.IsNullOrEmpty(cashBox))
+                where += "AND S.\"" + Db.F_Session_CashBox + "\" = '" + Sql(cashBox) + "' ";
+            if (!string.IsNullOrEmpty(userCode))
+                where += "AND S.\"" + Db.F_Session_User + "\" = '" + Sql(userCode) + "' ";
+            if (shift.HasValue)
+                where += "AND S.\"" + Db.F_Session_Shift + "\" = '" + EnumCodes.ToCode(shift.Value) + "' ";
+            return where;
+        }
+
+        private static string ReportFrom()
+        {
+            return "FROM \"@" + Db.SessionTable + "\" S " +
+                   "LEFT JOIN \"@" + Db.CashBoxTable + "\" B ON B.\"Code\" = S.\"" + Db.F_Session_CashBox + "\" " +
+                   "LEFT JOIN \"OUSR\" U ON U.\"USER_CODE\" = S.\"" + Db.F_Session_User + "\" " +
+                   "LEFT JOIN (SELECT \"" + Db.F_Trans_Session + "\" AS \"Sess\", " +
+                   "SUM(CASE WHEN \"" + Db.F_Trans_Dir + "\" = 'R' THEN \"" + Db.F_Trans_Amount + "\" ELSE 0 END) AS \"Rec\", " +
+                   "SUM(CASE WHEN \"" + Db.F_Trans_Dir + "\" = 'D' THEN \"" + Db.F_Trans_Amount + "\" ELSE 0 END) AS \"Dep\" " +
+                   "FROM \"@" + Db.TransTable + "\" GROUP BY \"" + Db.F_Trans_Session + "\") T ON T.\"Sess\" = S.\"Code\" ";
+        }
+
+        /// <summary>Rapport détaillé : une ligne par session (colonne Code masquée à l'écran).</summary>
+        public static string SessionsReportSql(DateTime from, DateTime to, string cashBox, string userCode, Shift? shift)
+        {
+            return "SELECT S.\"Code\" AS \"Code\", S.\"" + Db.F_Session_Date + "\" AS \"Date\", " +
+                   "COALESCE(B.\"Name\", S.\"" + Db.F_Session_CashBox + "\") AS \"Caisse\", " +
+                   "CASE S.\"" + Db.F_Session_Shift + "\" WHEN 'A' THEN 'Après-midi' WHEN 'S' THEN 'Soir' ELSE 'Matin' END AS \"Quart\", " +
+                   "COALESCE(U.\"U_NAME\", S.\"" + Db.F_Session_Cashier + "\") AS \"Util\", " +
+                   "S.\"" + Db.F_Session_OpenBal + "\" AS \"Ouv\", S.\"" + Db.F_Session_OpenDiff + "\" AS \"EcOuv\", " +
+                   "COALESCE(T.\"Rec\", 0) AS \"Rec\", COALESCE(T.\"Dep\", 0) AS \"Dep\", " +
+                   "S.\"" + Db.F_Session_TheoBal + "\" AS \"Theo\", " +
+                   "CASE WHEN S.\"" + Db.F_Session_Status + "\" = 'C' THEN S.\"" + Db.F_Session_CountBal + "\" ELSE 0 END AS \"Compte\", " +
+                   "CASE WHEN S.\"" + Db.F_Session_Status + "\" = 'C' THEN S.\"" + Db.F_Session_Diff + "\" ELSE 0 END AS \"Ecart\", " +
+                   "CASE WHEN S.\"" + Db.F_Session_Status + "\" = 'C' THEN 'Clôturée' ELSE 'Ouverte' END AS \"Statut\" " +
+                   ReportFrom() + ReportWhere(from, to, cashBox, userCode, shift) +
+                   "ORDER BY S.\"Code\" DESC";
+        }
+
+        /// <summary>Synthèse par caisse ou par utilisateur sur la période.</summary>
+        public static string SummaryReportSql(bool byCashBox, DateTime from, DateTime to, string cashBox, string userCode, Shift? shift)
+        {
+            string key = byCashBox
+                ? "COALESCE(B.\"Name\", S.\"" + Db.F_Session_CashBox + "\")"
+                : "COALESCE(U.\"U_NAME\", S.\"" + Db.F_Session_Cashier + "\")";
+            return "SELECT " + key + " AS \"" + (byCashBox ? "Caisse" : "Util") + "\", " +
+                   "COUNT(*) AS \"NbSess\", " +
+                   "SUM(CASE WHEN S.\"" + Db.F_Session_Status + "\" = 'O' THEN 1 ELSE 0 END) AS \"NbOuv\", " +
+                   "SUM(COALESCE(T.\"Rec\", 0)) AS \"Rec\", SUM(COALESCE(T.\"Dep\", 0)) AS \"Dep\", " +
+                   "SUM(S.\"" + Db.F_Session_OpenDiff + "\") AS \"EcOuv\", " +
+                   "SUM(CASE WHEN S.\"" + Db.F_Session_Status + "\" = 'C' THEN S.\"" + Db.F_Session_Diff + "\" ELSE 0 END) AS \"Ecart\" " +
+                   ReportFrom() + ReportWhere(from, to, cashBox, userCode, shift) +
+                   "GROUP BY " + key + " ORDER BY " + key;
+        }
+
+        public static string TransactionsReportSql(string sessionCode)
+        {
+            return "SELECT T0.\"" + Db.F_Trans_Time + "\" AS \"Heure\", " +
+                   "CASE WHEN T0.\"" + Db.F_Trans_Dir + "\" = 'R' THEN 'Recette' ELSE 'Dépense' END AS \"Sens\", " +
+                   "COALESCE(T1.\"Name\", T0.\"" + Db.F_Trans_TType + "\") AS \"Type\", T0.\"" + Db.F_Trans_Amount + "\" AS \"Montant\", " +
+                   "T0.\"" + Db.F_Trans_CardCode + "\" AS \"Tiers\", T0.\"" + Db.F_Trans_Descript + "\" AS \"Descr\", T0.\"" + Db.F_Trans_JE + "\" AS \"Ecriture\" " +
+                   "FROM \"@" + Db.TransTable + "\" T0 LEFT JOIN \"@" + Db.TTypeTable + "\" T1 ON T1.\"Code\" = T0.\"" + Db.F_Trans_TType + "\" " +
+                   "WHERE T0.\"" + Db.F_Trans_Session + "\" = '" + Sql(sessionCode) + "' ORDER BY T0.\"Code\"";
+        }
+
+        /// <summary>Billetage d'ouverture et de clôture côte à côte, par coupure.</summary>
+        public static string CountReportSql(string sessionCode)
+        {
+            string c = "\"@" + Db.CountTable + "\"";
+            return "SELECT COALESCE(D.\"Name\", X.\"Denom\") AS \"Coupure\", " +
+                   "SUM(CASE WHEN X.\"Phase\" = 'O' THEN X.\"Qty\" ELSE 0 END) AS \"QtOuv\", " +
+                   "SUM(CASE WHEN X.\"Phase\" = 'C' THEN X.\"Qty\" ELSE 0 END) AS \"QtClo\", " +
+                   "SUM(CASE WHEN X.\"Phase\" = 'C' THEN X.\"Amt\" ELSE 0 END) AS \"MtClo\" " +
+                   "FROM (SELECT \"" + Db.F_Count_Denom + "\" AS \"Denom\", \"" + Db.F_Count_Phase + "\" AS \"Phase\", \"" + Db.F_Count_Qty + "\" AS \"Qty\", " +
+                   "\"" + Db.F_Count_Amount + "\" AS \"Amt\", \"" + Db.F_Count_Value + "\" AS \"Val\" FROM " + c +
+                   " WHERE \"" + Db.F_Count_Session + "\" = '" + Sql(sessionCode) + "') X " +
+                   "LEFT JOIN \"@" + Db.DenomTable + "\" D ON D.\"Code\" = X.\"Denom\" " +
+                   "GROUP BY COALESCE(D.\"Name\", X.\"Denom\"), X.\"Val\" ORDER BY X.\"Val\" DESC, COALESCE(D.\"Name\", X.\"Denom\")";
+        }
+
+        // ---------- Migration mono-caisse -> multi-caisses ----------
+
+        /// <summary>
+        /// Idempotent. Crée la caisse "CAISSE1" à partir de l'ancien paramétrage
+        /// mono-caisse, y rattache les sessions existantes et pose les verrous
+        /// des sessions encore ouvertes.
+        /// </summary>
+        public static void MigrateToMultiCashBox()
+        {
+            Company company = DiCompany.Instance;
+
+            if (Scalar("SELECT TOP 1 \"Code\" FROM \"@" + Db.CashBoxTable + "\"") == null)
+            {
+                string legacyAcct = GetSettings().CashAccount;
+                if (string.IsNullOrEmpty(legacyAcct))
+                    return;   // installation neuve : les caisses sont à créer par l'administrateur
+
+                UserTable box = company.UserTables.Item(Db.CashBoxTable);
+                try
+                {
+                    box.Code = "CAISSE1";
+                    box.Name = "Caisse principale";
+                    box.UserFields.Fields.Item(Db.F_Box_CashAcct).Value = legacyAcct;
+                    box.UserFields.Fields.Item(Db.F_Box_Active).Value = "Y";
+                    DiCompany.ThrowIfError(box.Add(), "Création de la caisse CAISSE1 (migration)");
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(box);
+                }
+            }
+
+            string defaultBox = Scalar("SELECT TOP 1 \"Code\" FROM \"@" + Db.CashBoxTable + "\" ORDER BY \"Code\"");
+            if (defaultBox == null)
+                return;
+
+            // Sessions antérieures sans caisse
+            foreach (string code in Codes("SELECT \"Code\" FROM \"@" + Db.SessionTable + "\" WHERE COALESCE(\"" + Db.F_Session_CashBox + "\", '') = ''"))
+            {
+                UserTable table = company.UserTables.Item(Db.SessionTable);
+                try
+                {
+                    if (!table.GetByKey(code))
+                        continue;
+                    table.UserFields.Fields.Item(Db.F_Session_CashBox).Value = defaultBox;
+                    table.UserFields.Fields.Item(Db.F_Session_ExpOpen).Value = table.UserFields.Fields.Item(Db.F_Session_OpenBal).Value;
+                    DiCompany.ThrowIfError(table.Update(), "Rattachement de la session " + code + " à la caisse " + defaultBox);
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
+
+            // Verrous des sessions ouvertes (la plus récente garde la caisse)
+            foreach (string code in Codes("SELECT \"Code\" FROM \"@" + Db.SessionTable + "\" WHERE \"" + Db.F_Session_Status + "\" = 'O' ORDER BY \"Code\" DESC"))
+            {
+                SessionRow s = LoadSession(code);
+                TryAddLock(CashBoxLockKey(s.CashBox), s.Code);
+                if (!string.IsNullOrEmpty(s.UserCode))
+                    TryAddLock(UserLockKey(s.UserCode), s.Code);
+            }
         }
 
         // ---------- Comptabilisation ----------
@@ -570,13 +1076,28 @@ namespace PettyCashAddon.Services
 
         private static double GetAccountBalance(string acctCode)
         {
+            string value = Scalar("SELECT \"CurrTotal\" FROM \"OACT\" WHERE \"AcctCode\" = '" + Sql(acctCode) + "'");
+            if (value == null)
+                throw new InvalidOperationException("Le compte G/L « " + acctCode + " » n'existe pas.");
+            return Convert.ToDouble(value, CultureInfo.InvariantCulture);
+        }
+
+        private static bool BusinessPartnerExists(string cardCode)
+        {
+            return Scalar("SELECT \"CardCode\" FROM \"OCRD\" WHERE \"CardCode\" = '" + Sql(cardCode) + "'") != null;
+        }
+
+        /// <summary>Première colonne de la première ligne, en texte invariant (null si aucune ligne).</summary>
+        private static string Scalar(string sql)
+        {
             Recordset rs = NewRecordset();
             try
             {
-                rs.DoQuery("SELECT \"CurrTotal\" FROM \"OACT\" WHERE \"AcctCode\" = '" + Sql(acctCode) + "'");
+                rs.DoQuery(sql);
                 if (rs.EoF)
-                    throw new InvalidOperationException("Le compte G/L Caisse « " + acctCode + " » n'existe pas.");
-                return Convert.ToDouble(rs.Fields.Item(0).Value);
+                    return null;
+                object v = rs.Fields.Item(0).Value;
+                return v is IFormattable f ? f.ToString(null, CultureInfo.InvariantCulture) : Convert.ToString(v);
             }
             finally
             {
@@ -584,18 +1105,24 @@ namespace PettyCashAddon.Services
             }
         }
 
-        private static bool BusinessPartnerExists(string cardCode)
+        private static List<string> Codes(string sql)
         {
+            var result = new List<string>();
             Recordset rs = NewRecordset();
             try
             {
-                rs.DoQuery("SELECT \"CardCode\" FROM \"OCRD\" WHERE \"CardCode\" = '" + Sql(cardCode) + "'");
-                return !rs.EoF;
+                rs.DoQuery(sql);
+                while (!rs.EoF)
+                {
+                    result.Add(Convert.ToString(rs.Fields.Item(0).Value));
+                    rs.MoveNext();
+                }
             }
             finally
             {
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
             }
+            return result;
         }
 
         private static int? _sumDecimals;
@@ -643,7 +1170,7 @@ namespace PettyCashAddon.Services
             return Math.Round(value, _sumDecimals.Value, MidpointRounding.AwayFromZero);
         }
 
-        /// <summary>Montant mis en forme selon le paramétrage de la société (ex. "139 500").</summary>
+        /// <summary>Montant mis en forme selon le paramétrage de la société (ex. "139,500").</summary>
         public static string FormatAmount(double value)
         {
             EnsureAmountFormat();

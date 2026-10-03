@@ -24,16 +24,43 @@ namespace PettyCashAddon.Setup
             EnsureField(company, Db.TTypeTable, Db.F_TType_Dir, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Sens (R/D)");
             EnsureField(company, Db.TTypeTable, Db.F_TType_GLAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L");
 
+            EnsureTable(company, Db.CashBoxTable, "Petty Cash - Caisses");
+            EnsureField(company, Db.CashBoxTable, Db.F_Box_CashAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L Caisse");
+            EnsureField(company, Db.CashBoxTable, Db.F_Box_DiffAcct, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Compte G/L Écarts (option)");
+            EnsureField(company, Db.CashBoxTable, Db.F_Box_Active, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Active (Y/N)");
+
             EnsureTable(company, Db.SessionTable, "Petty Cash - Sessions");
             EnsureField(company, Db.SessionTable, Db.F_Session_Date, BoFieldTypes.db_Date, BoFldSubTypes.st_None, 0, "Date");
             EnsureField(company, Db.SessionTable, Db.F_Session_Shift, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Quart (M/A/S)");
             EnsureField(company, Db.SessionTable, Db.F_Session_Cashier, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 50, "Caissier");
+            EnsureField(company, Db.SessionTable, Db.F_Session_User, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 25, "Utilisateur SAP");
+            EnsureField(company, Db.SessionTable, Db.F_Session_CashBox, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Caisse");
+            EnsureField(company, Db.SessionTable, Db.F_Session_ExpOpen, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Ouverture attendue");
+            EnsureField(company, Db.SessionTable, Db.F_Session_OpenDiff, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Écart d'ouverture");
             EnsureField(company, Db.SessionTable, Db.F_Session_OpenBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde ouverture");
             EnsureField(company, Db.SessionTable, Db.F_Session_TheoBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde théorique");
             EnsureField(company, Db.SessionTable, Db.F_Session_CountBal, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Solde compté");
             EnsureField(company, Db.SessionTable, Db.F_Session_Diff, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Écart");
             EnsureField(company, Db.SessionTable, Db.F_Session_Status, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Statut (O/C)");
             EnsureField(company, Db.SessionTable, Db.F_Session_ClosedAt, BoFieldTypes.db_Date, BoFldSubTypes.st_None, 0, "Date de clôture");
+            EnsureField(company, Db.SessionTable, Db.F_Session_ClosedBy, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 25, "Clôturée par");
+
+            EnsureTable(company, Db.DenomTable, "Petty Cash - Coupures");
+            EnsureField(company, Db.DenomTable, Db.F_Denom_Value, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Valeur");
+            EnsureField(company, Db.DenomTable, Db.F_Denom_Kind, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Billet/Pièce (B/P)");
+            EnsureField(company, Db.DenomTable, Db.F_Denom_Active, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Active (Y/N)");
+            SeedDenominations(company);
+
+            EnsureTable(company, Db.CountTable, "Petty Cash - Billetage");
+            EnsureField(company, Db.CountTable, Db.F_Count_Session, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 30, "Session");
+            EnsureField(company, Db.CountTable, Db.F_Count_Phase, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 1, "Ouverture/Clôture (O/C)");
+            EnsureField(company, Db.CountTable, Db.F_Count_Denom, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 20, "Coupure");
+            EnsureField(company, Db.CountTable, Db.F_Count_Value, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Valeur");
+            EnsureField(company, Db.CountTable, Db.F_Count_Qty, BoFieldTypes.db_Numeric, BoFldSubTypes.st_None, 11, "Quantité");
+            EnsureField(company, Db.CountTable, Db.F_Count_Amount, BoFieldTypes.db_Float, BoFldSubTypes.st_Sum, 0, "Montant");
+
+            EnsureTable(company, Db.LockTable, "Petty Cash - Verrous");
+            EnsureField(company, Db.LockTable, Db.F_Lock_Session, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 30, "Session");
 
             EnsureTable(company, Db.TransTable, "Petty Cash - Transactions");
             EnsureField(company, Db.TransTable, Db.F_Trans_Session, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 30, "Session");
@@ -44,6 +71,48 @@ namespace PettyCashAddon.Setup
             EnsureField(company, Db.TransTable, Db.F_Trans_CardCode, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 15, "Tiers");
             EnsureField(company, Db.TransTable, Db.F_Trans_Descript, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 100, "Description");
             EnsureField(company, Db.TransTable, Db.F_Trans_JE, BoFieldTypes.db_Alpha, BoFldSubTypes.st_None, 15, "N° écriture");
+
+            // Passage mono-caisse -> multi-caisses (sans effet si déjà fait)
+            Services.CashSessionService.MigrateToMultiCashBox();
+        }
+
+        /// <summary>Coupures du franc CFA, créées seulement si la table est vide.</summary>
+        private static void SeedDenominations(Company company)
+        {
+            Recordset rs = (Recordset)company.GetBusinessObject(BoObjectTypes.BoRecordset);
+            try
+            {
+                rs.DoQuery("SELECT COUNT(*) FROM \"@" + Db.DenomTable + "\"");
+                if (Convert.ToInt32(rs.Fields.Item(0).Value) > 0)
+                    return;
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(rs);
+            }
+
+            var denoms = new (string Kind, int Value)[]
+            {
+                ("B", 10000), ("B", 5000), ("B", 2000), ("B", 1000), ("B", 500),
+                ("P", 500), ("P", 250), ("P", 200), ("P", 100), ("P", 50), ("P", 25), ("P", 10), ("P", 5)
+            };
+            foreach (var d in denoms)
+            {
+                UserTable table = company.UserTables.Item(Db.DenomTable);
+                try
+                {
+                    table.Code = d.Kind + d.Value;
+                    table.Name = (d.Kind == "B" ? "Billet " : "Pièce ") + d.Value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"));
+                    table.UserFields.Fields.Item(Db.F_Denom_Value).Value = (double)d.Value;
+                    table.UserFields.Fields.Item(Db.F_Denom_Kind).Value = d.Kind;
+                    table.UserFields.Fields.Item(Db.F_Denom_Active).Value = "Y";
+                    DiCompany.ThrowIfError(table.Add(), "Création de la coupure " + d.Kind + d.Value);
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(table);
+                }
+            }
         }
 
         private static void EnsureTable(Company company, string tableName, string description)

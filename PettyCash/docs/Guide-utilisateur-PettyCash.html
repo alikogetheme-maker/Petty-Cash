@@ -181,8 +181,8 @@ html { scroll-behavior: smooth; }
 <main>
 <header class="top">
   <p class="eyebrow">Add-on SAP Business One · Guide utilisateur</p>
-  <h1>Gestion de la petite caisse</h1>
-  <p class="lead">Ce guide explique comment ouvrir une session de caisse, enregistrer les entrées et sorties d'argent, compter la caisse en fin de quart et consulter l'historique. Il s'adresse aux caissiers, à leurs responsables et, pour la partie « Mise en place », à l'administrateur SAP.</p>
+  <h1>Gestion des caisses</h1>
+  <p class="lead">Ce guide explique comment ouvrir une session sur une caisse, compter le fonds, enregistrer les entrées et sorties d'argent, clôturer avec billetage et consulter les rapports. Il s'adresse aux caissiers, à leurs responsables et, pour la partie « Mise en place », à l'administrateur SAP.</p>
   <div class="note warn">
     <strong>À propos des illustrations</strong>
     <p>Les écrans de ce guide sont des reproductions fidèles des fenêtres de l'add-on (mêmes champs, libellés et boutons, même disposition). Les montants, noms et numéros de compte sont des exemples ; les montants suivent le format de la société (sans décimale, virgule pour les milliers : 139,500). L'apparence exacte (couleurs, polices) dépend de votre version et de votre thème SAP Business One.</p>
@@ -191,30 +191,36 @@ html { scroll-behavior: smooth; }
 
 <!-- ============================================================ -->
 <h2 id="principe">1. Le principe</h2>
-<p>La caisse fonctionne par <strong>sessions</strong>. Une session correspond à un quart de travail (matin, après-midi ou soir) tenu par un caissier. Une seule session peut être ouverte à la fois.</p>
+<p>Le site peut avoir <strong>plusieurs caisses</strong>, tenues en même temps par des personnes différentes. Chaque caissier se connecte à SAP avec <strong>son propre compte</strong> et ouvre une <strong>session</strong> sur une caisse libre, pour un quart (matin, après-midi ou soir).</p>
+<ul>
+  <li>Une caisse ouverte n'est plus proposée aux autres utilisateurs tant qu'elle n'est pas clôturée.</li>
+  <li>Un utilisateur ne tient qu'une caisse à la fois.</li>
+  <li>Seul l'utilisateur qui a ouvert la session y saisit des opérations. La clôture est possible par lui ou par un superutilisateur SAP (par exemple pour une session oubliée).</li>
+</ul>
 <div class="cycle" role="list">
-  <div role="listitem"><i>ÉTAPE 1</i><b>Ouvrir</b><span>Le solde d'ouverture est repris de la session précédente.</span></div>
+  <div role="listitem"><i>ÉTAPE 1</i><b>Ouvrir</b><span>Choisir une caisse libre et compter le fonds (billetage).</span></div>
   <div role="listitem"><i>ÉTAPE 2</i><b>Saisir</b><span>Chaque recette ou dépense est comptabilisée immédiatement.</span></div>
-  <div role="listitem"><i>ÉTAPE 3</i><b>Compter</b><span>Le caissier compte l'argent réellement présent.</span></div>
-  <div role="listitem"><i>ÉTAPE 4</i><b>Clôturer</b><span>L'écart éventuel est comptabilisé, la session est figée.</span></div>
+  <div role="listitem"><i>ÉTAPE 3</i><b>Compter</b><span>Billetage de fin de quart : billets et pièces.</span></div>
+  <div role="listitem"><i>ÉTAPE 4</i><b>Clôturer</b><span>L'écart est comptabilisé, la caisse est libérée.</span></div>
 </div>
-<p>Trois soldes sont suivis pendant une session :</p>
+<p>Les soldes suivis pendant une session :</p>
 <div class="table-wrap"><table class="doc">
   <tr><th>Solde</th><th>Signification</th></tr>
-  <tr><td><strong>Ouverture</strong></td><td>L'argent présent en caisse au début du quart. C'est le solde compté à la clôture de la session précédente.</td></tr>
+  <tr><td><strong>Attendu à l'ouverture</strong></td><td>Ce que la caisse devrait contenir : le solde compté à la clôture de sa session précédente.</td></tr>
+  <tr><td><strong>Ouverture</strong></td><td>Le fonds réellement compté au billetage d'ouverture. S'il diffère de l'attendu, l'<em>écart d'ouverture</em> est comptabilisé.</td></tr>
   <tr><td><strong>Théorique</strong></td><td>Ce qui devrait se trouver dans la caisse : ouverture + recettes − dépenses. Mis à jour à chaque opération.</td></tr>
-  <tr><td><strong>Compté</strong></td><td>L'argent réellement compté par le caissier à la fin du quart.</td></tr>
+  <tr><td><strong>Compté</strong></td><td>Le total du billetage de clôture.</td></tr>
   <tr><td><strong>Écart</strong></td><td>Compté − théorique. Positif = excédent, négatif = manquant.</td></tr>
 </table></div>
 
 <!-- ============================================================ -->
-<h2 id="installation">2. Mise en place (administrateur, une seule fois)</h2>
+<h2 id="installation">2. Mise en place (administrateur)</h2>
 
 <h3>2.1 Activer l'add-on</h3>
 <ol class="steps">
   <li><div>Dans SAP Business One : <span class="path">Administration → Add-ons → Gestion des add-ons</span>.</div></li>
-  <li><div>Enregistrez <code>PettyCashAddon.exe</code> et cochez le démarrage automatique si l'add-on doit se lancer à chaque connexion.</div></li>
-  <li><div>Au premier lancement, l'add-on crée lui-même ses tables (<code>@PC_SETTINGS</code>, <code>@PC_TTYPE</code>, <code>@PC_SESSION</code>, <code>@PC_TRANS</code>). Les autres utilisateurs doivent se reconnecter après cette création.</div></li>
+  <li><div>Enregistrez le package de l'add-on (64 bits) et cochez le démarrage automatique si l'add-on doit se lancer à chaque connexion.</div></li>
+  <li><div>Au premier lancement, l'add-on crée lui-même ses tables (<code>@PC_SETTINGS</code>, <code>@PC_CASHBOX</code>, <code>@PC_TTYPE</code>, <code>@PC_SESSION</code>, <code>@PC_TRANS</code>, <code>@PC_DENOM</code>, <code>@PC_COUNT</code>, <code>@PC_LOCK</code>) et les coupures du franc CFA. Les autres utilisateurs doivent se reconnecter après cette création.</div></li>
   <li><div>Le menu <strong>Petty Cash</strong>, avec son icône (un billet et une pièce), apparaît en bas du menu principal (Modules), et la barre d'état affiche « Add-on Petty Cash démarré. ».</div></li>
 </ol>
 
@@ -241,36 +247,43 @@ html { scroll-behavior: smooth; }
   <figcaption>Le menu Petty Cash et ses deux écrans, dans le menu principal de SAP Business One.</figcaption>
 </figure>
 
-<h3>2.2 Renseigner les comptes de la caisse</h3>
-<p>Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_SETTINGS</span> et complétez l'unique ligne (code <code>1</code>) :</p>
-<ul>
-  <li><strong>Compte G/L Caisse</strong> : le compte de trésorerie qui représente la caisse.</li>
-  <li><strong>Compte G/L Écarts de caisse</strong> : le compte qui reçoit les excédents et manquants constatés à la clôture.</li>
-</ul>
+<h3>2.2 Compte d'écarts</h3>
+<p>Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_SETTINGS</span> et renseignez, sur l'unique ligne (code <code>1</code>), le <strong>Compte G/L Écarts de caisse</strong> : il reçoit les excédents et manquants de toutes les caisses. La colonne <em>Compte G/L Caisse</em> de cette table ne sert plus (elle a servi à créer la première caisse lors du passage au multi-caisses).</p>
+
+<h3>2.3 Déclarer les caisses</h3>
+<p>Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_CASHBOX</span> et créez une ligne par caisse :</p>
 <figure class="shot">
   <div class="frame">
-    <div class="win" style="width:560px;height:150px">
-      <div class="tb"><span>Petty Cash - Paramètres</span><span class="x">_ ▢ ✕</span></div>
+    <div class="win" style="width:640px;height:178px">
+      <div class="tb"><span>Petty Cash - Caisses</span><span class="x">_ ▢ ✕</span></div>
       <div class="body">
-        <div class="m" style="left:8px;top:8px;width:542px;height:72px">
-          <table style="width:542px">
-            <colgroup><col style="width:24px"><col style="width:60px"><col style="width:150px"><col style="width:150px"><col></colgroup>
-            <tr><th>#</th><th>Code</th><th>Nom</th><th>Compte G/L Caisse</th><th>Compte G/L Écarts de caisse</th></tr>
-            <tr><td class="idx">1</td><td>1</td><td>Paramètres caisse</td><td>57100001</td><td>65880000</td></tr>
-            <tr><td class="idx">2</td><td></td><td></td><td></td><td></td></tr>
+        <div class="m" style="left:8px;top:8px;width:622px;height:100px">
+          <table style="width:622px">
+            <colgroup><col style="width:24px"><col style="width:80px"><col style="width:160px"><col style="width:130px"><col style="width:150px"><col></colgroup>
+            <tr><th>#</th><th>Code</th><th>Nom</th><th>Compte G/L Caisse</th><th>Compte G/L Écarts (option)</th><th>Active (Y/N)</th></tr>
+            <tr><td class="idx">1</td><td>CAISSE1</td><td>Caisse principale</td><td>57100001</td><td></td><td>Y</td></tr>
+            <tr><td class="idx">2</td><td>CAISSE2</td><td>Caisse comptoir</td><td>57100002</td><td></td><td>Y</td></tr>
+            <tr><td class="idx">3</td><td>CAISSE3</td><td>Caisse livraisons</td><td>57100003</td><td></td><td>N</td></tr>
+            <tr><td class="idx">4</td><td></td><td></td><td></td><td></td><td></td></tr>
           </table>
         </div>
-        <div class="b" style="left:8px;top:92px;width:65px">OK</div>
-        <div class="b" style="left:80px;top:92px;width:65px">Annuler</div>
+        <div class="b" style="left:8px;top:120px;width:65px">OK</div>
+        <div class="b" style="left:80px;top:120px;width:65px">Annuler</div>
       </div>
     </div>
   </div>
-  <figcaption>Exemple de paramétrage. Utilisez les numéros de compte de votre propre plan comptable.</figcaption>
+  <figcaption>Exemple : trois caisses, dont une désactivée. Utilisez les comptes de votre plan comptable.</figcaption>
 </figure>
+<ul>
+  <li><strong>Code</strong> : identifiant court (sans espace), <strong>Nom</strong> : libellé affiché aux caissiers. SAP impose des noms tous différents.</li>
+  <li><strong>Compte G/L Caisse</strong> : obligatoire. Utilisez <strong>un compte distinct par caisse</strong>, sinon la comptabilité ne permet plus de suivre chaque caisse.</li>
+  <li><strong>Compte G/L Écarts</strong> : facultatif ; vide = compte d'écarts par défaut (2.2).</li>
+  <li><strong>Active</strong> : <code>N</code> retire la caisse de la liste proposée à l'ouverture, sans effacer son historique.</li>
+</ul>
 <div class="note warn"><strong>Important</strong><p>Saisissez le <em>code</em> du compte (celui visible dans le plan comptable), et choisissez des comptes de détail, pas des comptes de titre : SAP refuse de comptabiliser sur un compte de titre.</p></div>
 
-<h3>2.3 Créer les types d'opération</h3>
-<p>Chaque opération de caisse appartient à un type, qui détermine son sens (recette ou dépense) et le compte comptable mouvementé en face de la caisse. Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_TTYPE</span> :</p>
+<h3>2.4 Créer les types d'opération</h3>
+<p>Chaque opération appartient à un type, qui détermine son sens (recette ou dépense) et le compte comptable mouvementé en face de la caisse. Les types sont communs à toutes les caisses. Ouvrez <span class="path">Outils → Fenêtres par défaut → PC_TTYPE</span> :</p>
 <figure class="shot">
   <div class="frame">
     <div class="win" style="width:560px;height:236px">
@@ -293,44 +306,48 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
   </div>
-  <figcaption>Exemples de types. « Nom » est le libellé que verra le caissier dans la liste déroulante.</figcaption>
+  <figcaption>Exemples de types. « Nom » est le libellé que verra le caissier dans la liste déroulante ; il doit être unique.</figcaption>
 </figure>
 <ul>
-  <li><strong>Sens</strong> : <code>R</code> pour une recette (l'argent entre dans la caisse), <code>D</code> pour une dépense (l'argent sort). Une autre valeur est traitée comme une dépense.</li>
+  <li><strong>Sens</strong> : <code>R</code> pour une recette (l'argent entre dans la caisse), <code>D</code> pour une dépense (l'argent sort).</li>
   <li><strong>Compte G/L</strong> : obligatoire. Pour une alimentation ou un versement, c'est le compte de banque ; pour une dépense, le compte de charge.</li>
 </ul>
 
-<h3>2.4 Mettre le fonds de caisse initial</h3>
-<p>Pour la toute première session, l'add-on reprend comme solde d'ouverture <strong>le solde actuel du compte G/L Caisse</strong>. Deux façons de démarrer :</p>
+<h3>2.5 Coupures du billetage</h3>
+<p>La table <span class="path">PC_DENOM</span> est remplie automatiquement avec les coupures du franc CFA : billets de 10 000, 5 000, 2 000, 1 000 et 500 ; pièces de 500, 250, 200, 100, 50, 25, 10 et 5. Mettez <code>N</code> dans <em>Active</em> pour masquer une coupure du billetage ; ajoutez-en une si besoin (Code unique, Valeur, B pour billet ou P pour pièce).</p>
+
+<h3>2.6 Fonds de caisse initial</h3>
+<p>À la toute première ouverture d'une caisse, le solde attendu est le <strong>solde actuel de son compte G/L</strong>. Deux façons de démarrer :</p>
 <ul>
-  <li><strong>Recommandé</strong> : ouvrez la première session (solde d'ouverture 0 si le compte est vide), puis saisissez une recette de type <em>Alimentation de caisse</em> pour le montant du fonds (par exemple 150,000). L'écriture Débit Caisse / Crédit Banque est passée automatiquement.</li>
-  <li>Ou passez vous-même l'écriture du fonds dans <span class="path">Gestion financière → Écritures</span> avant la première ouverture.</li>
+  <li><strong>Recommandé</strong> : ouvrez la session avec un billetage à 0 (caisse vide), puis saisissez une recette de type <em>Alimentation de caisse</em> pour le montant du fonds. L'écriture Débit Caisse / Crédit Banque est passée automatiquement.</li>
+  <li>Ou passez l'écriture du fonds dans <span class="path">Gestion financière → Écritures</span> avant la première ouverture, puis comptez ce fonds au billetage.</li>
 </ul>
-<p>Ensuite, chaque session reprend simplement le solde compté de la précédente.</p>
 
 <!-- ============================================================ -->
 <h2 id="ouvrir">3. Ouvrir une session</h2>
-<p>Menu <span class="path">Petty Cash → Session de caisse</span>. Si aucune session n'est ouverte, l'écran se présente ainsi :</p>
+<p>Connectez-vous à SAP avec <strong>votre</strong> compte, puis menu <span class="path">Petty Cash → Session de caisse</span>. Si vous n'avez pas de session ouverte, l'écran se présente ainsi :</p>
 
 <figure class="shot">
   <div class="frame">
     <div class="win" style="width:640px;height:430px">
       <div class="tb"><span>Session de caisse</span><span class="x">_ ▢ ✕</span></div>
       <div class="body">
-        <div class="l" style="left:10px;top:15px;width:90px">Quart</div>
-        <div class="f cmb" style="left:110px;top:12px;width:150px">Matin</div>
-        <div class="l" style="left:280px;top:15px;width:70px">Caissier</div>
-        <div class="f focus" style="left:360px;top:12px;width:260px">K. Mensah</div>
-        <div class="l" style="left:10px;top:45px;width:90px">Statut</div>
-        <div class="f off" style="left:110px;top:42px;width:260px">Aucune session ouverte</div>
+        <div class="l" style="left:10px;top:15px;width:95px">Caisse</div>
+        <div class="f cmb focus" style="left:110px;top:12px;width:200px">Caisse comptoir</div>
+        <div class="l" style="left:330px;top:15px;width:65px">Quart</div>
+        <div class="f cmb" style="left:400px;top:12px;width:150px">Matin</div>
+        <div class="l" style="left:10px;top:45px;width:95px">Utilisateur</div>
+        <div class="f off" style="left:110px;top:42px;width:200px">K. Mensah</div>
+        <div class="l" style="left:330px;top:45px;width:65px">Statut</div>
+        <div class="f off" style="left:400px;top:42px;width:220px">Aucune session ouverte</div>
         <div class="l" style="left:10px;top:75px;width:95px">Solde ouverture</div>
         <div class="f off num" style="left:110px;top:72px;width:150px">150,000</div>
-        <div class="l" style="left:280px;top:75px;width:95px">Solde théorique</div>
-        <div class="f off" style="left:380px;top:72px;width:150px"></div>
+        <div class="l" style="left:330px;top:75px;width:65px">Solde théorique</div>
+        <div class="f off" style="left:400px;top:72px;width:150px"></div>
         <div class="l" style="left:10px;top:105px;width:95px">Solde compté</div>
         <div class="f off" style="left:110px;top:102px;width:150px"></div>
-        <div class="l" style="left:280px;top:105px;width:95px">Écart</div>
-        <div class="f off" style="left:380px;top:102px;width:150px"></div>
+        <div class="l" style="left:330px;top:105px;width:65px">Écart</div>
+        <div class="f off" style="left:400px;top:102px;width:150px"></div>
         <div class="m" style="left:10px;top:135px;width:610px;height:215px">
           <table style="width:610px">
             <colgroup><col style="width:20px"><col style="width:60px"><col style="width:60px"><col style="width:140px"><col style="width:90px"><col style="width:70px"><col></colgroup>
@@ -341,38 +358,73 @@ html { scroll-behavior: smooth; }
         <div class="b off" style="left:150px;top:360px;width:150px">Ajouter transaction</div>
         <div class="b off" style="left:310px;top:360px;width:150px">Clôturer la session</div>
         <div class="b" style="left:520px;top:360px;width:100px">Actualiser</div>
-        <div class="pin" style="left:263px;top:11px">1</div>
-        <div class="pin" style="left:600px;top:-10px">2</div>
-        <div class="pin" style="left:263px;top:71px">3</div>
-        <div class="pin" style="left:120px;top:349px">4</div>
+        <div class="pin" style="left:313px;top:11px">1</div>
+        <div class="pin" style="left:553px;top:11px">2</div>
+        <div class="pin" style="left:313px;top:41px">3</div>
+        <div class="pin" style="left:263px;top:71px">4</div>
+        <div class="pin" style="left:120px;top:349px">5</div>
       </div>
     </div>
   </div>
   <ul class="legend">
-    <li><span>1</span><div>Choisissez le quart : Matin, Après-midi ou Soir.</div></li>
-    <li><span>2</span><div>Saisissez le nom du caissier (obligatoire).</div></li>
-    <li><span>3</span><div>Le solde qui sera repris à l'ouverture est affiché pour information. Il n'est pas modifiable.</div></li>
-    <li><span>4</span><div>Cliquez sur <strong>Ouvrir session</strong>.</div></li>
+    <li><span>1</span><div><strong>Caisse</strong> : seules les caisses actives et libres sont proposées. Une caisse ouverte par un collègue n'apparaît pas.</div></li>
+    <li><span>2</span><div><strong>Quart</strong> : proposé selon l'heure (matin avant 12 h, après-midi avant 18 h, soir ensuite), modifiable.</div></li>
+    <li><span>3</span><div><strong>Utilisateur</strong> : votre nom SAP, repris automatiquement.</div></li>
+    <li><span>4</span><div><strong>Solde ouverture</strong> : le montant attendu dans la caisse choisie. Il change quand vous changez de caisse.</div></li>
+    <li><span>5</span><div>Cliquez sur <strong>Ouvrir session</strong> : la fenêtre de billetage s'ouvre.</div></li>
   </ul>
 </figure>
 
-<p>Une confirmation rappelle le solde repris. Avant de répondre <strong>Oui</strong>, vérifiez que ce montant correspond bien à l'argent présent dans la caisse.</p>
+<h3>Billetage d'ouverture</h3>
+<p>Comptez le fonds présent dans la caisse et saisissez, pour chaque coupure, le <strong>nombre</strong> de billets ou de pièces. Le montant de chaque ligne, le total compté et l'écart avec le montant attendu se calculent à chaque saisie.</p>
 <figure class="shot">
   <div class="frame">
-    <div class="win msg" style="width:420px">
-      <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
+    <div class="win" style="width:450px;height:500px">
+      <div class="tb"><span>Billetage d'ouverture</span><span class="x">✕</span></div>
       <div class="body">
-        <div class="txt"><div class="ico">i</div><div>Ouvrir la session Matin pour K. Mensah ?
-
-Solde d'ouverture repris : 150,000
-Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></div>
-        <div class="btns"><span class="b">Oui</span><span class="b">Non</span></div>
+        <div class="l" style="left:10px;top:10px;width:420px">Caisse comptoir — Matin — K. Mensah</div>
+        <div class="l" style="left:10px;top:35px;width:140px">Montant attendu</div>
+        <div class="f off num" style="left:160px;top:32px;width:160px">150,000</div>
+        <div class="m" style="left:10px;top:62px;width:420px;height:300px">
+          <table style="width:420px">
+            <colgroup><col style="width:140px"><col style="width:80px"><col style="width:70px"><col></colgroup>
+            <tr><th>Coupure</th><th>Valeur</th><th>Quantité</th><th>Montant</th></tr>
+            <tr><td>Billet 10 000</td><td class="n">10,000</td><td class="n">12</td><td class="n">120,000</td></tr>
+            <tr><td>Billet 5 000</td><td class="n">5,000</td><td class="n">4</td><td class="n">20,000</td></tr>
+            <tr><td>Billet 2 000</td><td class="n">2,000</td><td class="n">3</td><td class="n">6,000</td></tr>
+            <tr><td>Billet 1 000</td><td class="n">1,000</td><td class="n">3</td><td class="n">3,000</td></tr>
+            <tr><td>Billet 500</td><td class="n">500</td><td class="n">1</td><td class="n">500</td></tr>
+            <tr><td>Pièce 500</td><td class="n">500</td><td class="n">1</td><td class="n">500</td></tr>
+            <tr><td>Pièce 250</td><td class="n">250</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 200</td><td class="n">200</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 100</td><td class="n">100</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 50</td><td class="n">50</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 25</td><td class="n">25</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 10</td><td class="n">10</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 5</td><td class="n">5</td><td class="n">0</td><td class="n">0</td></tr>
+          </table>
+        </div>
+        <div class="l" style="left:10px;top:375px;width:140px">Total compté</div>
+        <div class="f off num" style="left:160px;top:372px;width:160px">150,000</div>
+        <div class="l" style="left:10px;top:400px;width:140px">Écart</div>
+        <div class="f off num" style="left:160px;top:397px;width:160px">0</div>
+        <div class="b" style="left:10px;top:435px;width:90px">Valider</div>
+        <div class="b" style="left:110px;top:435px;width:90px">Annuler</div>
+        <div class="pin" style="left:296px;top:66px">1</div>
+        <div class="pin" style="left:323px;top:371px">2</div>
+        <div class="pin" style="left:323px;top:396px">3</div>
       </div>
     </div>
   </div>
-  <figcaption>Confirmation d'ouverture.</figcaption>
+  <ul class="legend">
+    <li><span>1</span><div>Seule la colonne <strong>Quantité</strong> se saisit. Passez d'une ligne à l'autre avec la touche Tab ou la souris.</div></li>
+    <li><span>2</span><div><strong>Total compté</strong> : la somme des lignes. Il devient le solde d'ouverture de la session.</div></li>
+    <li><span>3</span><div><strong>Écart</strong> avec le montant attendu, avec la mention « excédent » ou « manquant ».</div></li>
+  </ul>
 </figure>
-<div class="note tip"><strong>Bon à savoir</strong><p>Si la fenêtre affiche déjà une session ouverte, c'est que le quart précédent n'a pas été clôturé. Il faut d'abord le clôturer (section 6) : deux sessions ne peuvent pas être ouvertes en même temps.</p></div>
+<p>Cliquez sur <strong>Valider</strong>. Une confirmation récapitule le montant attendu, le total compté et l'écart ; le bouton par défaut est <em>Non</em>. Après <strong>Oui</strong>, la session est ouverte et la caisse disparaît de la liste des autres utilisateurs.</p>
+<div class="note warn"><strong>Écart à l'ouverture</strong><p>Si le fonds compté diffère du montant attendu (argent manquant ou en trop depuis la dernière clôture), l'écart est comptabilisé sur le compte d'écarts et la barre d'état le signale. La session démarre sur le montant réellement compté. Recomptez avant de confirmer : l'écart apparaîtra dans les rapports au nom de la session.</p></div>
+<div class="note tip"><strong>Bon à savoir</strong><p>Si l'écran affiche directement une session ouverte, c'est que vous n'avez pas clôturé votre session précédente : il faut d'abord la clôturer (section 6). Si le statut indique « Aucune caisse libre », toutes les caisses actives sont occupées.</p></div>
 
 <!-- ============================================================ -->
 <h2 id="saisir">4. Saisir une recette ou une dépense</h2>
@@ -412,7 +464,7 @@ Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></
   </ul>
 </figure>
 
-<p>Cliquez sur <strong>Valider</strong>. L'écriture comptable est passée immédiatement, la fenêtre se ferme, la barre d'état affiche « Transaction enregistrée et comptabilisée. », la ligne s'ajoute à la session et le solde théorique est mis à jour. Ne cliquez qu'une fois : chaque clic réussi enregistre une transaction. En cas de problème, un message s'affiche, <strong>rien n'est enregistré</strong> et la fenêtre reste ouverte pour corriger.</p>
+<p>Cliquez sur <strong>Valider</strong>. L'écriture comptable est passée immédiatement sur le compte de <strong>votre caisse</strong>, la fenêtre se ferme, la barre d'état affiche « Transaction enregistrée et comptabilisée. », la ligne s'ajoute à la session et le solde théorique est mis à jour. Ne cliquez qu'une fois : chaque clic réussi enregistre une transaction. En cas de problème, un message s'affiche, <strong>rien n'est enregistré</strong> et la fenêtre reste ouverte pour corriger.</p>
 
 <div class="note bad"><strong>Dépense refusée</strong><p>Une dépense supérieure au solde théorique est refusée : on ne peut pas sortir de la caisse plus d'argent qu'elle n'en contient. Alimentez d'abord la caisse (recette de type <em>Alimentation de caisse</em>).</p></div>
 
@@ -422,20 +474,22 @@ Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></
     <div class="win" style="width:640px;height:430px">
       <div class="tb"><span>Session de caisse</span><span class="x">_ ▢ ✕</span></div>
       <div class="body">
-        <div class="l" style="left:10px;top:15px;width:90px">Quart</div>
-        <div class="f cmb off" style="left:110px;top:12px;width:150px">Matin</div>
-        <div class="l" style="left:280px;top:15px;width:70px">Caissier</div>
-        <div class="f off" style="left:360px;top:12px;width:260px">K. Mensah</div>
-        <div class="l" style="left:10px;top:45px;width:90px">Statut</div>
-        <div class="f off" style="left:110px;top:42px;width:260px">Ouverte le 01/10/2026 (Matin)</div>
+        <div class="l" style="left:10px;top:15px;width:95px">Caisse</div>
+        <div class="f cmb off" style="left:110px;top:12px;width:200px">Caisse comptoir</div>
+        <div class="l" style="left:330px;top:15px;width:65px">Quart</div>
+        <div class="f cmb off" style="left:400px;top:12px;width:150px">Matin</div>
+        <div class="l" style="left:10px;top:45px;width:95px">Utilisateur</div>
+        <div class="f off" style="left:110px;top:42px;width:200px">K. Mensah</div>
+        <div class="l" style="left:330px;top:45px;width:65px">Statut</div>
+        <div class="f off" style="left:400px;top:42px;width:220px">Ouverte le 03/10/2026 (Matin)</div>
         <div class="l" style="left:10px;top:75px;width:95px">Solde ouverture</div>
         <div class="f off num" style="left:110px;top:72px;width:150px">150,000</div>
-        <div class="l" style="left:280px;top:75px;width:95px">Solde théorique</div>
-        <div class="f off num" style="left:380px;top:72px;width:150px">139,500</div>
+        <div class="l" style="left:330px;top:75px;width:65px">Solde théorique</div>
+        <div class="f off num" style="left:400px;top:72px;width:150px">139,500</div>
         <div class="l" style="left:10px;top:105px;width:95px">Solde compté</div>
-        <div class="f num focus" style="left:110px;top:102px;width:150px"></div>
-        <div class="l" style="left:280px;top:105px;width:95px">Écart</div>
-        <div class="f off" style="left:380px;top:102px;width:150px"></div>
+        <div class="f off" style="left:110px;top:102px;width:150px"></div>
+        <div class="l" style="left:330px;top:105px;width:65px">Écart</div>
+        <div class="f off" style="left:400px;top:102px;width:150px"></div>
         <div class="m" style="left:10px;top:135px;width:610px;height:215px">
           <table style="width:610px">
             <colgroup><col style="width:20px"><col style="width:60px"><col style="width:60px"><col style="width:140px"><col style="width:90px"><col style="width:70px"><col></colgroup>
@@ -455,7 +509,7 @@ Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></
   </div>
   <figcaption>Session en cours : 150,000 − 12,500 − 3,000 + 25,000 − 20,000 = 139,500 de solde théorique.</figcaption>
 </figure>
-<p>Le bouton <strong>Actualiser</strong> relit la session depuis la base, utile si un collègue a saisi une opération depuis un autre poste.</p>
+<p>Le bouton <strong>Actualiser</strong> relit la session et la liste des caisses libres depuis la base.</p>
 
 <!-- ============================================================ -->
 <h2 id="corriger">5. Corriger une erreur de saisie</h2>
@@ -470,81 +524,111 @@ Vérifiez que ce montant correspond à l'argent présent dans la caisse.</div></
 <!-- ============================================================ -->
 <h2 id="cloturer">6. Clôturer la session</h2>
 <ol class="steps">
-  <li><div>Comptez l'argent physiquement présent dans la caisse (billets et pièces).</div></li>
-  <li><div>Saisissez ce montant dans <strong>Solde compté</strong>. <code>139500</code>, <code>139,500</code> ou <code>139 500</code> sont acceptés (la virgule sépare les milliers). Si la caisse est vide, saisissez <code>0</code>.</div></li>
-  <li><div>Cliquez sur <strong>Clôturer la session</strong>.</div></li>
-  <li><div>Contrôlez le récapitulatif puis répondez <strong>Oui</strong>. Le bouton par défaut est <em>Non</em> pour éviter une clôture par erreur.</div></li>
+  <li><div>Cliquez sur <strong>Clôturer la session</strong> : le solde théorique est relu et la fenêtre <strong>Billetage de clôture</strong> s'ouvre, avec ce solde comme montant attendu.</div></li>
+  <li><div>Comptez la caisse et saisissez le nombre de billets et de pièces par coupure. Si la caisse est vide, laissez toutes les quantités à 0.</div></li>
+  <li><div>Cliquez sur <strong>Valider</strong>, contrôlez le récapitulatif puis répondez <strong>Oui</strong>. Le bouton par défaut est <em>Non</em> pour éviter une clôture par erreur.</div></li>
 </ol>
 <figure class="shot">
   <div class="frame">
-    <div class="win msg" style="width:420px">
+    <div class="win" style="width:450px;height:500px">
+      <div class="tb"><span>Billetage de clôture</span><span class="x">✕</span></div>
+      <div class="body">
+        <div class="l" style="left:10px;top:10px;width:420px">Caisse comptoir — Matin — ouverte par K. Mensah</div>
+        <div class="l" style="left:10px;top:35px;width:140px">Montant attendu</div>
+        <div class="f off num" style="left:160px;top:32px;width:160px">139,500</div>
+        <div class="m" style="left:10px;top:62px;width:420px;height:300px">
+          <table style="width:420px">
+            <colgroup><col style="width:140px"><col style="width:80px"><col style="width:70px"><col></colgroup>
+            <tr><th>Coupure</th><th>Valeur</th><th>Quantité</th><th>Montant</th></tr>
+            <tr><td>Billet 10 000</td><td class="n">10,000</td><td class="n">12</td><td class="n">120,000</td></tr>
+            <tr><td>Billet 5 000</td><td class="n">5,000</td><td class="n">3</td><td class="n">15,000</td></tr>
+            <tr><td>Billet 2 000</td><td class="n">2,000</td><td class="n">1</td><td class="n">2,000</td></tr>
+            <tr><td>Billet 1 000</td><td class="n">1,000</td><td class="n">2</td><td class="n">2,000</td></tr>
+            <tr><td>Billet 500</td><td class="n">500</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 500</td><td class="n">500</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 250</td><td class="n">250</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 200</td><td class="n">200</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 100</td><td class="n">100</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 50</td><td class="n">50</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 25</td><td class="n">25</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 10</td><td class="n">10</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 5</td><td class="n">5</td><td class="n">0</td><td class="n">0</td></tr>
+          </table>
+        </div>
+        <div class="l" style="left:10px;top:375px;width:140px">Total compté</div>
+        <div class="f off num" style="left:160px;top:372px;width:160px">139,000</div>
+        <div class="l" style="left:10px;top:400px;width:140px">Écart</div>
+        <div class="f off num" style="left:160px;top:397px;width:160px">-500 (manquant)</div>
+        <div class="b" style="left:10px;top:435px;width:90px">Valider</div>
+        <div class="b" style="left:110px;top:435px;width:90px">Annuler</div>
+      </div>
+    </div>
+  </div>
+  <figcaption>Il manque 500 dans la caisse par rapport au théorique.</figcaption>
+</figure>
+<figure class="shot">
+  <div class="frame">
+    <div class="win msg" style="width:430px">
       <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
       <div class="body">
-        <div class="txt"><div class="ico">?</div><div>Solde théorique : 139,500
-Solde compté : 139,000
+        <div class="txt"><div class="ico">?</div><div>Montant attendu : 139,500
+Total compté : 139,000
 Écart : -500 (manquant)
+L'écart sera comptabilisé sur le compte d'écarts de caisse.
 
 Confirmer la clôture de la session ? Elle ne pourra plus être modifiée.</div></div>
         <div class="btns"><span class="b">Oui</span><span class="b">Non</span></div>
       </div>
     </div>
   </div>
-  <figcaption>Ici, il manque 500 dans la caisse par rapport au théorique.</figcaption>
+  <figcaption>Confirmation de clôture.</figcaption>
 </figure>
 <p>À la confirmation :</p>
 <ul>
-  <li>le solde théorique est recalculé une dernière fois depuis la base ;</li>
-  <li>si l'écart n'est pas nul, il est comptabilisé sur le compte d'écarts de caisse ;</li>
-  <li>la session passe au statut <em>Clôturée</em> et n'accepte plus d'opération ;</li>
-  <li>le <strong>solde compté devient le solde d'ouverture</strong> de la session suivante.</li>
+  <li>le total du billetage devient le solde compté, et l'écart avec le théorique est comptabilisé s'il n'est pas nul ;</li>
+  <li>le billetage est conservé (consultable dans le rapport) ;</li>
+  <li>la session passe au statut <em>Clôturée</em>, et la <strong>caisse est libérée</strong> pour le prochain utilisateur ;</li>
+  <li>le solde compté devient le <strong>solde attendu</strong> à la prochaine ouverture de cette caisse.</li>
 </ul>
-<figure class="shot">
-  <div class="frame">
-    <div class="win msg" style="width:340px">
-      <div class="tb"><span>SAP Business One</span><span class="x">✕</span></div>
-      <div class="body">
-        <div class="txt"><div class="ico">i</div><div>Session clôturée.
-
-Solde théorique : 139,500
-Solde compté : 139,000
-Écart comptabilisé : -500</div></div>
-        <div class="btns"><span class="b">OK</span></div>
-      </div>
-    </div>
-  </div>
-  <figcaption>Message de fin de clôture. L'écran revient ensuite à l'état « Aucune session ouverte ».</figcaption>
-</figure>
 <div class="note warn"><strong>Un écart important ?</strong><p>Recomptez avant de confirmer, et vérifiez qu'aucune opération n'a été oubliée. Une fois la session clôturée, l'écart est comptabilisé et ne se corrige plus que par une écriture manuelle du service comptable.</p></div>
+<div class="note tip"><strong>Session oubliée</strong><p>Si un caissier est parti sans clôturer, sa caisse reste bloquée. Un <strong>superutilisateur SAP</strong> peut la clôturer depuis le rapport de caisse (section 7), avec le billetage de ce qui se trouve dans la caisse.</p></div>
 
 <!-- ============================================================ -->
 <h2 id="rapport">7. Consulter le rapport de caisse</h2>
-<p>Menu <span class="path">Petty Cash → Rapport de caisse</span>. L'écran s'ouvre sur les sept derniers jours.</p>
+<p>Menu <span class="path">Petty Cash → Rapport de caisse</span>. L'écran s'ouvre sur les sept derniers jours, toutes caisses et tous utilisateurs confondus.</p>
 <figure class="shot">
   <div class="frame">
-    <div class="win" style="width:700px;height:470px">
+    <div class="win" style="width:910px;height:640px">
       <div class="tb"><span>Rapport de caisse</span><span class="x">_ ▢ ✕</span></div>
       <div class="body">
-        <div class="l" style="left:10px;top:15px;width:40px">Du</div>
-        <div class="f" style="left:55px;top:12px;width:100px">24/09/2026</div>
-        <div class="l" style="left:170px;top:15px;width:25px">Au</div>
-        <div class="f" style="left:200px;top:12px;width:100px">01/10/2026</div>
-        <div class="l" style="left:320px;top:15px;width:40px">Quart</div>
-        <div class="f cmb" style="left:365px;top:12px;width:130px">Tous</div>
-        <div class="b" style="left:510px;top:10px;width:100px">Rechercher</div>
-        <div class="m" style="left:10px;top:45px;width:670px;height:190px">
-          <table style="width:670px">
-            <colgroup><col style="width:75px"><col style="width:80px"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:80px"><col style="width:70px"><col></colgroup>
-            <tr><th>Date</th><th>Quart</th><th>Caissier</th><th>Ouverture</th><th>Théorique</th><th>Compté</th><th>Écart</th><th>Statut</th></tr>
-            <tr class="sel"><td>01/10/2026</td><td>Matin</td><td>K. Mensah</td><td class="n">150,000</td><td class="n">139,500</td><td class="n">139,000</td><td class="n">-500</td><td>Clôturée</td></tr>
-            <tr><td>30/09/2026</td><td>Soir</td><td>A. Traoré</td><td class="n">148,200</td><td class="n">150,000</td><td class="n">150,000</td><td class="n">0</td><td>Clôturée</td></tr>
-            <tr><td>30/09/2026</td><td>Après-midi</td><td>A. Traoré</td><td class="n">160,000</td><td class="n">148,000</td><td class="n">148,200</td><td class="n">200</td><td>Clôturée</td></tr>
-            <tr><td>30/09/2026</td><td>Matin</td><td>K. Mensah</td><td class="n">100,000</td><td class="n">160,000</td><td class="n">160,000</td><td class="n">0</td><td>Clôturée</td></tr>
+        <div class="l" style="left:10px;top:15px;width:30px">Du</div>
+        <div class="f" style="left:45px;top:12px;width:90px">26/09/2026</div>
+        <div class="l" style="left:145px;top:15px;width:25px">Au</div>
+        <div class="f" style="left:172px;top:12px;width:90px">03/10/2026</div>
+        <div class="l" style="left:280px;top:15px;width:45px">Caisse</div>
+        <div class="f cmb" style="left:330px;top:12px;width:170px">Toutes</div>
+        <div class="l" style="left:515px;top:15px;width:65px">Utilisateur</div>
+        <div class="f cmb" style="left:585px;top:12px;width:170px">Tous</div>
+        <div class="l" style="left:10px;top:43px;width:30px">Quart</div>
+        <div class="f cmb" style="left:45px;top:40px;width:110px">Tous</div>
+        <div class="l" style="left:172px;top:43px;width:30px">Vue</div>
+        <div class="f cmb" style="left:205px;top:40px;width:220px">Sessions détaillées</div>
+        <div class="b" style="left:440px;top:38px;width:100px">Rechercher</div>
+        <div class="m" style="left:10px;top:72px;width:875px;height:230px">
+          <table style="width:875px">
+            <colgroup><col style="width:72px"><col style="width:110px"><col style="width:70px"><col style="width:85px"><col style="width:68px"><col style="width:62px"><col style="width:66px"><col style="width:66px"><col style="width:68px"><col style="width:66px"><col style="width:62px"><col></colgroup>
+            <tr><th>Date</th><th>Caisse</th><th>Quart</th><th>Utilisateur</th><th>Ouverture</th><th>Écart ouv.</th><th>Recettes</th><th>Dépenses</th><th>Théorique</th><th>Compté</th><th>Écart clôt.</th><th>Statut</th></tr>
+            <tr class="sel"><td>03/10/2026</td><td>Caisse comptoir</td><td>Matin</td><td>K. Mensah</td><td class="n">150,000</td><td class="n">0</td><td class="n">25,000</td><td class="n">35,500</td><td class="n">139,500</td><td class="n">139,000</td><td class="n">-500</td><td>Clôturée</td></tr>
+            <tr><td>03/10/2026</td><td>Caisse principale</td><td>Matin</td><td>A. Traoré</td><td class="n">200,000</td><td class="n">0</td><td class="n">50,000</td><td class="n">10,000</td><td class="n">240,000</td><td class="n">0</td><td class="n">0</td><td>Ouverte</td></tr>
+            <tr><td>02/10/2026</td><td>Caisse comptoir</td><td>Soir</td><td>K. Mensah</td><td class="n">151,000</td><td class="n">-1,000</td><td class="n">12,000</td><td class="n">13,000</td><td class="n">150,000</td><td class="n">150,000</td><td class="n">0</td><td>Clôturée</td></tr>
+            <tr><td>02/10/2026</td><td>Caisse principale</td><td>Après-midi</td><td>A. Traoré</td><td class="n">180,000</td><td class="n">0</td><td class="n">40,000</td><td class="n">20,000</td><td class="n">200,000</td><td class="n">200,000</td><td class="n">0</td><td>Clôturée</td></tr>
           </table>
         </div>
-        <div class="l" style="left:10px;top:245px;width:420px">Détail de la session sélectionnée (cliquez sur une ligne ci-dessus) :</div>
-        <div class="m" style="left:10px;top:265px;width:670px;height:165px">
-          <table style="width:670px">
-            <colgroup><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:80px"><col style="width:70px"><col style="width:150px"><col></colgroup>
+        <div class="l" style="left:10px;top:308px;width:875px">Total : 4 session(s) — Recettes 127,000 — Dépenses 78,500 — Écarts d'ouverture -1,000 — Écarts de clôture -500</div>
+        <div class="l" style="left:10px;top:333px;width:400px">Opérations de la session sélectionnée</div>
+        <div class="m" style="left:10px;top:352px;width:575px;height:205px">
+          <table style="width:575px">
+            <colgroup><col style="width:60px"><col style="width:58px"><col style="width:120px"><col style="width:66px"><col style="width:56px"><col style="width:140px"><col></colgroup>
             <tr><th>Heure</th><th>Sens</th><th>Type</th><th>Montant</th><th>Tiers</th><th>Description</th><th>N° écriture</th></tr>
             <tr><td>08:42:10</td><td>Dépense</td><td>Fournitures de bureau</td><td class="n">12,500</td><td></td><td>Ramettes papier + stylos</td><td>4521</td></tr>
             <tr><td>09:15:37</td><td>Dépense</td><td>Transport / courses</td><td class="n">3,000</td><td></td><td>Taxi livraison urgente</td><td>4522</td></tr>
@@ -552,54 +636,88 @@ Solde compté : 139,000
             <tr><td>11:30:48</td><td>Dépense</td><td>Carburant</td><td class="n">20,000</td><td></td><td>Plein véhicule service</td><td>4524</td></tr>
           </table>
         </div>
-        <div class="pin" style="left:613px;top:-8px">1</div>
-        <div class="pin" style="left:-8px;top:60px">2</div>
-        <div class="pin" style="left:660px;top:278px">3</div>
+        <div class="l" style="left:595px;top:333px;width:290px">Billetage (ouverture / clôture)</div>
+        <div class="m" style="left:595px;top:352px;width:290px;height:205px">
+          <table style="width:290px">
+            <colgroup><col style="width:100px"><col style="width:58px"><col style="width:58px"><col></colgroup>
+            <tr><th>Coupure</th><th>Qté ouv.</th><th>Qté clôt.</th><th>Montant clôt.</th></tr>
+            <tr><td>Billet 10 000</td><td class="n">12</td><td class="n">12</td><td class="n">120,000</td></tr>
+            <tr><td>Billet 5 000</td><td class="n">4</td><td class="n">3</td><td class="n">15,000</td></tr>
+            <tr><td>Billet 2 000</td><td class="n">3</td><td class="n">1</td><td class="n">2,000</td></tr>
+            <tr><td>Billet 1 000</td><td class="n">3</td><td class="n">2</td><td class="n">2,000</td></tr>
+            <tr><td>Billet 500</td><td class="n">1</td><td class="n">0</td><td class="n">0</td></tr>
+            <tr><td>Pièce 500</td><td class="n">1</td><td class="n">0</td><td class="n">0</td></tr>
+          </table>
+        </div>
+        <div class="b off" style="left:10px;top:568px;width:220px">Clôturer la session sélectionnée</div>
+        <div class="pin" style="left:760px;top:11px">1</div>
+        <div class="pin" style="left:428px;top:39px">2</div>
+        <div class="pin" style="left:-8px;top:90px">3</div>
+        <div class="pin" style="left:-8px;top:307px">4</div>
+        <div class="pin" style="left:870px;top:362px">5</div>
+        <div class="pin" style="left:233px;top:567px">6</div>
       </div>
     </div>
   </div>
   <ul class="legend">
-    <li><span>1</span><div>Choisissez la période (le calendrier SAP est disponible dans les champs date) et, si besoin, un quart, puis <strong>Rechercher</strong>.</div></li>
-    <li><span>2</span><div>Les sessions s'affichent de la plus récente à la plus ancienne. Cliquez sur une ligne pour voir son détail.</div></li>
-    <li><span>3</span><div>Le <strong>N° écriture</strong> permet de retrouver l'écriture dans <span class="path">Gestion financière → Écritures</span>.</div></li>
+    <li><span>1</span><div><strong>Filtres</strong> : période (calendrier SAP disponible), caisse, utilisateur et quart.</div></li>
+    <li><span>2</span><div><strong>Vue</strong> : <em>Sessions détaillées</em> (une ligne par session), <em>Synthèse par caisse</em> ou <em>Synthèse par utilisateur</em>. Changer de vue relance la recherche.</div></li>
+    <li><span>3</span><div>Dans la vue détaillée, cliquez sur une session pour afficher ses opérations et son billetage en bas. Un clic sur un titre de colonne trie la liste.</div></li>
+    <li><span>4</span><div><strong>Totaux</strong> de la sélection : recettes, dépenses, écarts d'ouverture et de clôture.</div></li>
+    <li><span>5</span><div><strong>Billetage</strong> : quantités comptées par coupure à l'ouverture et à la clôture. Le <strong>N° écriture</strong> permet de retrouver chaque opération dans <span class="path">Gestion financière → Écritures</span>.</div></li>
+    <li><span>6</span><div><strong>Clôturer la session sélectionnée</strong> : actif seulement sur une session ouverte, pour son ouvreur ou un superutilisateur. Il lance le billetage de clôture (section 6).</div></li>
   </ul>
 </figure>
-<p>Pour une session encore ouverte, les colonnes Compté et Écart restent à zéro jusqu'à la clôture.</p>
+<p>Exemple de <strong>synthèse par caisse</strong> sur la même période :</p>
+<div class="table-wrap"><table class="doc">
+  <tr><th>Caisse</th><th style="text-align:right">Sessions</th><th style="text-align:right">En cours</th><th style="text-align:right">Recettes</th><th style="text-align:right">Dépenses</th><th style="text-align:right">Écart ouv.</th><th style="text-align:right">Écart clôt.</th></tr>
+  <tr><td>Caisse comptoir</td><td class="num">2</td><td class="num">0</td><td class="num">37,000</td><td class="num">48,500</td><td class="num">-1,000</td><td class="num">-500</td></tr>
+  <tr><td>Caisse principale</td><td class="num">2</td><td class="num">1</td><td class="num">90,000</td><td class="num">30,000</td><td class="num">0</td><td class="num">0</td></tr>
+</table></div>
+<p>La <strong>synthèse par utilisateur</strong> présente les mêmes colonnes par caissier : elle permet de suivre les écarts de chacun.</p>
 
 <!-- ============================================================ -->
 <h2 id="compta">8. Écritures comptables générées</h2>
-<p>Pour information du service comptable, voici les écritures passées automatiquement. Chacune porte le code de la session en référence et un libellé commençant par « Caisse ».</p>
+<p>Pour information du service comptable, voici les écritures passées automatiquement. Chacune porte le code de la session en référence et un libellé commençant par « Caisse ». Le compte Caisse est celui de la caisse de la session.</p>
 <div class="table-wrap"><table class="doc">
   <tr><th>Événement</th><th>Débit</th><th>Crédit</th></tr>
-  <tr><td>Recette</td><td>Compte Caisse</td><td>Compte du type d'opération</td></tr>
-  <tr><td>Dépense</td><td>Compte du type d'opération</td><td>Compte Caisse</td></tr>
-  <tr><td>Clôture avec excédent (compté &gt; théorique)</td><td>Compte Caisse</td><td>Compte Écarts de caisse</td></tr>
-  <tr><td>Clôture avec manquant (compté &lt; théorique)</td><td>Compte Écarts de caisse</td><td>Compte Caisse</td></tr>
+  <tr><td>Recette</td><td>Compte de la caisse</td><td>Compte du type d'opération</td></tr>
+  <tr><td>Dépense</td><td>Compte du type d'opération</td><td>Compte de la caisse</td></tr>
+  <tr><td>Ouverture ou clôture avec excédent (compté &gt; attendu)</td><td>Compte de la caisse</td><td>Compte d'écarts</td></tr>
+  <tr><td>Ouverture ou clôture avec manquant (compté &lt; attendu)</td><td>Compte d'écarts</td><td>Compte de la caisse</td></tr>
 </table></div>
-<p>Exemple pour la session du 01/10/2026 (comptes d'exemple) :</p>
+<p>Exemple pour la caisse comptoir le 03/10/2026 (comptes d'exemple) :</p>
 <div class="table-wrap"><table class="doc">
   <tr><th>N°</th><th>Libellé</th><th>Compte</th><th style="text-align:right">Débit</th><th style="text-align:right">Crédit</th></tr>
-  <tr><td>4521</td><td>Caisse Fournitures de bureau - Ramettes…</td><td>60550000<br>57100001</td><td class="num">12,500<br>&nbsp;</td><td class="num">&nbsp;<br>12,500</td></tr>
-  <tr><td>4523</td><td>Caisse Vente comptant - Vente comptoir…</td><td>57100001<br>70110000</td><td class="num">25,000<br>&nbsp;</td><td class="num">&nbsp;<br>25,000</td></tr>
-  <tr><td>4525</td><td>Caisse ecart cloture (manquant)</td><td>65880000<br>57100001</td><td class="num">500<br>&nbsp;</td><td class="num">&nbsp;<br>500</td></tr>
+  <tr><td>4521</td><td>Caisse Fournitures de bureau - Ramettes…</td><td>60550000<br>57100002</td><td class="num">12,500<br>&nbsp;</td><td class="num">&nbsp;<br>12,500</td></tr>
+  <tr><td>4523</td><td>Caisse Vente comptant - Vente comptoir…</td><td>57100002<br>70110000</td><td class="num">25,000<br>&nbsp;</td><td class="num">&nbsp;<br>25,000</td></tr>
+  <tr><td>4525</td><td>Caisse ecart cloture (manquant) CAISSE2</td><td>65880000<br>57100002</td><td class="num">500<br>&nbsp;</td><td class="num">&nbsp;<br>500</td></tr>
 </table></div>
 <p>Le libellé est limité à 50 caractères par SAP : les descriptions longues y sont tronquées, mais restent complètes dans le détail de la session.</p>
-<div class="note warn"><strong>Compte Caisse réservé</strong><p>Pour que le solde de la caisse dans l'add-on reste égal au solde du compte en comptabilité, le compte Caisse ne doit être mouvementé que par l'add-on. Un encaissement ou une écriture saisis directement dans SAP sur ce compte n'apparaîtront pas dans la session.</p></div>
+<div class="note warn"><strong>Comptes de caisse réservés</strong><p>Pour que le solde de chaque caisse dans l'add-on reste égal au solde de son compte en comptabilité, chaque compte de caisse ne doit être mouvementé que par l'add-on, et chaque caisse doit avoir son propre compte.</p></div>
 
 <!-- ============================================================ -->
 <h2 id="erreurs">9. Messages fréquents et solutions</h2>
 <div class="table-wrap"><table class="doc">
   <tr><th>Message</th><th>Cause et solution</th></tr>
-  <tr><td>Renseignez les comptes G/L (U_CashAcct, U_DiffAcct)…</td><td>Le paramétrage n'est pas fait. Voir la section 2.2.</td></tr>
-  <tr><td>Une session de caisse est déjà ouverte…</td><td>Le quart précédent n'a pas été clôturé. Clôturez-le avant d'en ouvrir un nouveau.</td></tr>
-  <tr><td>Renseignez le nom du caissier.</td><td>Le champ Caissier est vide.</td></tr>
-  <tr><td>Aucun type d'opération paramétré pour ce sens</td><td>Aucun type n'existe pour Recette ou Dépense. Voir la section 2.3.</td></tr>
+  <tr><td>Statut « Aucune caisse libre »</td><td>Toutes les caisses actives sont occupées. Attendez une clôture, ou faites clôturer une session oubliée par un superutilisateur (rapport).</td></tr>
+  <tr><td>La caisse « … » est déjà ouverte par …</td><td>Un collègue l'a ouverte entre-temps. Cliquez sur <strong>Actualiser</strong> et choisissez une autre caisse.</td></tr>
+  <tr><td>La caisse « … » vient d'être ouverte par un autre utilisateur.</td><td>Deux personnes ont ouvert la même caisse au même instant : une seule ouverture a été retenue. Choisissez une autre caisse.</td></tr>
+  <tr><td>Vous avez déjà une session ouverte sur la caisse « … »</td><td>Un utilisateur ne tient qu'une caisse à la fois. Clôturez votre session en cours.</td></tr>
+  <tr><td>Seul l'utilisateur qui a ouvert cette session (…) peut y saisir des opérations.</td><td>Les opérations se saisissent avec le compte SAP de l'ouvreur de la session.</td></tr>
+  <tr><td>Seul l'utilisateur qui a ouvert cette session (…) ou un superutilisateur peut la clôturer.</td><td>Demandez à l'ouvreur ou à un superutilisateur SAP de clôturer.</td></tr>
+  <tr><td>La caisse « … » est désactivée.</td><td>La caisse a été désactivée dans PC_CASHBOX (Active = N).</td></tr>
+  <tr><td>Aucun compte G/L n'est paramétré pour la caisse « … »</td><td>Complétez le compte de la caisse dans PC_CASHBOX (section 2.3).</td></tr>
+  <tr><td>Renseignez le compte d'écarts de caisse (U_DiffAcct)…</td><td>Aucun compte d'écarts ni dans PC_SETTINGS ni sur la caisse (sections 2.2 et 2.3).</td></tr>
+  <tr><td>Aucune coupure active dans la table @PC_DENOM.</td><td>Réactivez au moins une coupure (section 2.5).</td></tr>
+  <tr><td>Un billetage est déjà en cours : terminez-le ou annulez-le.</td><td>Une fenêtre de billetage est déjà ouverte : validez-la ou fermez-la.</td></tr>
+  <tr><td>Une quantité de billetage ne peut pas être négative.</td><td>Corrigez la quantité saisie.</td></tr>
+  <tr><td>Aucun type d'opération paramétré pour ce sens</td><td>Aucun type n'existe pour Recette ou Dépense. Voir la section 2.4.</td></tr>
   <tr><td>Aucun compte G/L n'est paramétré pour le type…</td><td>Le type choisi n'a pas de compte. Complétez la table PC_TTYPE.</td></tr>
   <tr><td>Montant invalide : saisissez un montant positif.</td><td>Montant vide, nul ou négatif. Le sens (Recette ou Dépense) se choisit dans la liste, pas avec un signe moins.</td></tr>
   <tr><td>Dépense refusée : le solde théorique de la caisse… est insuffisant</td><td>La caisse ne contient pas assez d'argent. Vérifiez le montant ou alimentez la caisse.</td></tr>
   <tr><td>Le tiers « … » n'existe pas dans SAP.</td><td>Code client ou fournisseur inconnu. Corrigez-le ou laissez le champ vide.</td></tr>
   <tr><td>Comptabilisation de l'écriture de caisse : [code] …</td><td>SAP a refusé l'écriture : période comptable fermée, compte de titre, compte bloqué… Le détail suit le code d'erreur. Rien n'a été enregistré ; transmettez le message au service comptable.</td></tr>
-  <tr><td>Saisissez le solde compté… avant de clôturer.</td><td>Le champ Solde compté est vide. Saisissez 0 si la caisse est vide.</td></tr>
 </table></div>
 
 </main>

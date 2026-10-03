@@ -69,7 +69,6 @@ namespace PettyCashAddon.Services
     {
         // Longueurs maximales des champs SAP / UDF alimentés
         private const int MaxJeMemo = 50;        // OJDT.Memo, JDT1.LineMemo
-        private const int MaxUdtName = 30;
         private const int MaxCashier = 50;
         private const int MaxCardCode = 15;
         private const int MaxDescription = 100;
@@ -222,7 +221,9 @@ namespace PettyCashAddon.Services
             try
             {
                 table.Code = code;
-                table.Name = Truncate(DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + " " + EnumCodes.ToCode(shift) + " " + cashier.Trim(), MaxUdtName);
+                // SAP pose un index unique sur Name (comme sur Code) : on y met le Code,
+                // sinon deux sessions même jour / même quart / même caissier se heurtent.
+                table.Name = code;
                 table.UserFields.Fields.Item(Db.F_Session_Date).Value = DateTime.Today;
                 table.UserFields.Fields.Item(Db.F_Session_Shift).Value = EnumCodes.ToCode(shift);
                 table.UserFields.Fields.Item(Db.F_Session_Cashier).Value = Truncate(cashier.Trim(), MaxCashier);
@@ -343,7 +344,9 @@ namespace PettyCashAddon.Services
                 try
                 {
                     table.Code = code;
-                    table.Name = Truncate(type.Code + " " + amount.ToString(CultureInfo.InvariantCulture), MaxUdtName);
+                    // Index unique sur Name : "type + montant" provoquait l'erreur -2035
+                    // dès qu'une même opération du même montant était ressaisie.
+                    table.Name = code;
                     table.UserFields.Fields.Item(Db.F_Trans_Session).Value = session.Code;
                     table.UserFields.Fields.Item(Db.F_Trans_Time).Value = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                     table.UserFields.Fields.Item(Db.F_Trans_Dir).Value = EnumCodes.ToCode(direction);
